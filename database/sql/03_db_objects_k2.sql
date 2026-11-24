@@ -72,11 +72,11 @@ SELECT
     COALESCE(gr.internal_review_count, 0) AS internal_review_count
 FROM guides g
 LEFT JOIN users u ON u.user_id = g.user_id
-JOIN tour_specializations ts ON ts.specialization_id = g.specialization_id
-JOIN destinations d ON d.destination_id = g.primary_destination_id
-JOIN culinaries c ON c.culinary_id = g.recommended_culinary_id
-JOIN hotels h ON h.hotel_id = g.partner_hotel_id
-JOIN transports t ON t.transport_id = g.default_transport_id
+LEFT JOIN tour_specializations ts ON ts.specialization_id = g.specialization_id
+LEFT JOIN destinations d ON d.destination_id = g.primary_destination_id
+LEFT JOIN culinaries c ON c.culinary_id = g.recommended_culinary_id
+LEFT JOIN hotels h ON h.hotel_id = g.partner_hotel_id
+LEFT JOIN transports t ON t.transport_id = g.default_transport_id
 LEFT JOIN guide_langs gl ON gl.guide_id = g.guide_id
 LEFT JOIN guide_revs gr ON gr.guide_id = g.guide_id;
 
@@ -215,7 +215,7 @@ BEGIN
 
     RETURN v_new_booking;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- Function 2: fn_update_booking_status
 -- Memperbarui status booking dengan validasi transisi, Optimistic Locking, sinkronisasi guide status, dan auto audit
@@ -289,7 +289,7 @@ BEGIN
 
     RETURN v_updated;
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
 -- ---------------------------------------------------------------------
 -- 3. TRIGGERS BISNIS & AUDIT OTOMATIS

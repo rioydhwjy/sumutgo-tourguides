@@ -2,183 +2,438 @@
 
 namespace App\Models;
 
+use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\Model;
 
 class TourGuideModel extends Model
 {
-    protected $table            = 'tour_guides';
+    protected $table            = 'guides';
     protected $primaryKey       = 'guide_id';
-    protected $useAutoIncrement = false;
+    protected $useAutoIncrement = true;
     protected $returnType       = 'array';
     protected $protectFields    = true;
     protected $allowedFields    = [
-        'guide_id',
-        'nama_guide',
-        'nama_agensi_gmaps',
-        'rating_gmaps',
-        'jumlah_ulasan_gmaps',
-        'alamat_basecamp',
-        'kecamatan',
+        'guide_code',
+        'user_id',
+        'guide_name',
+        'agency_name',
+        'gmaps_rating',
+        'gmaps_review_count',
+        'basecamp_address',
         'latitude',
         'longitude',
-        'no_telepon',
+        'phone_number',
+        'daily_rate_idr',
+        'availability_status',
         'specialization_id',
-        'tarif_per_hari_idr',
-        'status_ketersediaan',
-        'destination_id',
-        'culinary_id',
-        'hotel_id',
-        'transport_id',
+        'primary_destination_id',
+        'recommended_culinary_id',
+        'partner_hotel_id',
+        'default_transport_id',
+        'version',
     ];
 
+    protected $useTimestamps = false;
+
     /**
-     * Mengambil daftar lengkap Tour Guide dari VIEW PostgreSQL `vw_tour_guides_lengkap`
-     * lengkap dengan filter pencarian, spesialisasi, status, bahasa, tarif maksimum, dan pengurutan.
+     * Retrieve paginated tour guides from vw_guides_detail with comprehensive filtering & sorting
      */
-    public function getFilteredGuides(array $filters = []): array
+    public function getFilteredGuides(array $filters = [], int $page = 1, int $perPage = 15): array
     {
-        $builder = $this->db->table('vw_tour_guides_lengkap');
+        $page = max(1, $page);
+        $perPage = min(100, max(1, $perPage));
+        $offset = ($page - 1) * $perPage;
 
-        if (! empty($filters['spec']) && $filters['spec'] !== 'ALL') {
-            $builder->where('spesialisasi_tur', $filters['spec']);
-        }
+        $builder = $this->db->table('vw_guides_detail');
 
+        // Status Filter
         if (! empty($filters['status']) && $filters['status'] !== 'ALL') {
-            $builder->where('status_ketersediaan', $filters['status']);
+            $builder->where('availability_status', trim($filters['status']));
         }
 
-        if (! empty($filters['lang']) && $filters['lang'] !== 'ALL') {
-            $builder->like('bahasa_dikuasai', $filters['lang'], 'both', null, true);
+        // Specialization Filter
+        if (! empty($filters['specialization_id']) && $filters['specialization_id'] !== 'ALL') {
+            $builder->where('specialization_id', (int) $filters['specialization_id']);
         }
 
-        if (! empty($filters['max_price'])) {
-            $builder->where('tarif_per_hari_idr <=', (int) $filters['max_price']);
+        // Destination Filter
+        if (! empty($filters['destination_id']) && $filters['destination_id'] !== 'ALL') {
+            $builder->where('primary_destination_id', (int) $filters['destination_id']);
         }
 
-        if (! empty($filters['search'])) {
-            $q = trim($filters['search']);
+        // Language Filter (checks if language_id is inside language_ids integer array)
+        if (! empty($filters['language_id']) && $filters['language_id'] !== 'ALL') {
+            $langId = (int) $filters['language_id'];
+            $builder->where("? = ANY(language_ids)", [$langId]);
+        }
+
+        // Price Range Filters
+        if (! empty($filters['min_rate'])) {
+            $builder->where('daily_rate_idr >=', (int) $filters['min_rate']);
+        }
+        if (! empty($filters['max_rate'])) {
+            $builder->where('daily_rate_idr <=', (int) $filters['max_rate']);
+        }
+
+        // Rating Filter
+        if (! empty($filters['min_rating'])) {
+            $builder->where('gmaps_rating >=', (float) $filters['min_rating']);
+        }
+
+        // Full-Text / Keyword Search with parameterized ILIKE (insensitiveSearch = true)
+        if (! empty($filters['q'])) {
+            $q = trim($filters['q']);
             $builder->groupStart()
-                ->like('guide_id', $q, 'both', null, true)
-                ->orLike('nama_guide', $q, 'both', null, true)
-                ->orLike('nama_agensi_gmaps', $q, 'both', null, true)
-                ->orLike('kecamatan', $q, 'both', null, true)
-                ->orLike('nama_wisata_utama', $q, 'both', null, true)
-                ->orLike('rekomendasi_kuliner', $q, 'both', null, true)
-                ->orLike('nama_hotel', $q, 'both', null, true)
-                ->orLike('nama_transportasi', $q, 'both', null, true)
-                ->orLike('bahasa_dikuasai', $q, 'both', null, true)
+                ->like('guide_code', $q, 'both', null, true)
+                ->orLike('guide_name', $q, 'both', null, true)
+                ->orLike('agency_name', $q, 'both', null, true)
+                ->orLike('basecamp_address', $q, 'both', null, true)
+                ->orLike('specialization_name', $q, 'both', null, true)
+                ->orLike('destination_name', $q, 'both', null, true)
+                ->orLike('culinary_name', $q, 'both', null, true)
+                ->orLike('hotel_name', $q, 'both', null, true)
+                ->orLike('transport_name', $q, 'both', null, true)
+                ->orLike('spoken_languages', $q, 'both', null, true)
                 ->groupEnd();
         }
 
+        // Sorting Whitelist
         $sort = $filters['sort'] ?? 'id_asc';
         switch ($sort) {
             case 'rating_desc':
-                $builder->orderBy('rating_gmaps', 'DESC')->orderBy('jumlah_ulasan_gmaps', 'DESC');
+                $builder->orderBy('gmaps_rating', 'DESC')->orderBy('gmaps_review_count', 'DESC');
                 break;
             case 'reviews_desc':
-                $builder->orderBy('jumlah_ulasan_gmaps', 'DESC');
+                $builder->orderBy('gmaps_review_count', 'DESC');
                 break;
-            case 'price_asc':
-                $builder->orderBy('tarif_per_hari_idr', 'ASC');
+            case 'rate_asc':
+                $builder->orderBy('daily_rate_idr', 'ASC');
                 break;
-            case 'price_desc':
-                $builder->orderBy('tarif_per_hari_idr', 'DESC');
+            case 'rate_desc':
+                $builder->orderBy('daily_rate_idr', 'DESC');
+                break;
+            case 'name_asc':
+                $builder->orderBy('guide_name', 'ASC');
                 break;
             default:
                 $builder->orderBy('guide_id', 'ASC');
                 break;
         }
 
-        $rows = $builder->get()->getResultArray();
+        $totalBuilder = clone $builder;
+        $total = $totalBuilder->countAllResults(false);
 
-        // Format agar struktur JSON identik dengan konsumsi frontend & API
-        return array_map(static function (array $r): array {
-            $langs = array_values(array_filter(array_map('trim', explode(',', (string) ($r['bahasa_dikuasai'] ?? '')))));
-            return [
-                'id'             => $r['guide_id'],
-                'name'           => $r['nama_guide'],
-                'agency'         => $r['nama_agensi_gmaps'],
-                'rating'         => (float) $r['rating_gmaps'],
-                'reviews'        => (int) $r['jumlah_ulasan_gmaps'],
-                'address'        => $r['alamat_basecamp'],
-                'district'       => $r['kecamatan'] ?? 'Medan',
-                'lat'            => (float) $r['latitude'],
-                'lng'            => (float) $r['longitude'],
-                'phone'          => $r['no_telepon'],
-                'languages'      => $langs,
-                'specialization' => $r['spesialisasi_tur'],
-                'price'          => (int) $r['tarif_per_hari_idr'],
-                'status'         => $r['status_ketersediaan'],
-                'destId'         => $r['destination_id'],
-                'destName'       => $r['nama_wisata_utama'],
-                'culinaryId'     => $r['culinary_id'],
-                'culinaryName'   => $r['rekomendasi_kuliner'],
-                'hotelId'        => $r['hotel_id'],
-                'hotelName'      => $r['nama_hotel'],
-                'transportId'    => $r['transport_id'],
-                'transportName'  => $r['nama_transportasi'],
-            ];
+        $rows = $builder->limit($perPage, $offset)->get()->getResultArray();
+
+        $items = array_map(function (array $r): array {
+            return $this->formatGuideRow($r);
         }, $rows);
-    }
 
-    /**
-     * Mengambil detail 1 pemandu wisata berdasarkan guide_id (contoh: TG-001)
-     */
-    public function getGuideDetail(string $guideId): ?array
-    {
-        $row = $this->db->table('vw_tour_guides_lengkap')
-            ->where('guide_id', strtoupper(trim($guideId)))
-            ->get()
-            ->getRowArray();
-
-        if (! $row) {
-            return null;
-        }
-
-        $langs = array_values(array_filter(array_map('trim', explode(',', (string) ($row['bahasa_dikuasai'] ?? '')))));
         return [
-            'id'             => $row['guide_id'],
-            'name'           => $row['nama_guide'],
-            'agency'         => $row['nama_agensi_gmaps'],
-            'rating'         => (float) $row['rating_gmaps'],
-            'reviews'        => (int) $row['jumlah_ulasan_gmaps'],
-            'address'        => $row['alamat_basecamp'],
-            'district'       => $row['kecamatan'] ?? 'Medan',
-            'lat'            => (float) $row['latitude'],
-            'lng'            => (float) $row['longitude'],
-            'phone'          => $row['no_telepon'],
-            'languages'      => $langs,
-            'specialization' => $row['spesialisasi_tur'],
-            'price'          => (int) $row['tarif_per_hari_idr'],
-            'status'         => $row['status_ketersediaan'],
-            'destId'         => $row['destination_id'],
-            'destName'       => $row['nama_wisata_utama'],
-            'culinaryId'     => $row['culinary_id'],
-            'culinaryName'   => $row['rekomendasi_kuliner'],
-            'hotelId'        => $row['hotel_id'],
-            'hotelName'      => $row['nama_hotel'],
-            'transportId'    => $row['transport_id'],
-            'transportName'  => $row['nama_transportasi'],
+            'items' => $items,
+            'meta'  => [
+                'current_page' => $page,
+                'per_page'     => $perPage,
+                'total_items'  => $total,
+                'total_pages'  => (int) ceil($total / $perPage),
+            ],
         ];
     }
 
     /**
-     * Statistik ringkasan database untuk header dan kartu informasi
+     * Get detail of a single guide by guide_id or guide_code
+     */
+    public function getGuideDetail(int|string $identifier): ?array
+    {
+        $builder = $this->db->table('vw_guides_detail');
+        if (is_numeric($identifier)) {
+            $builder->where('guide_id', (int) $identifier);
+        } else {
+            $builder->where('guide_code', strtoupper(trim((string) $identifier)));
+        }
+
+        $row = $builder->get()->getRowArray();
+        if (! $row) {
+            return null;
+        }
+
+        $formatted = $this->formatGuideRow($row);
+
+        // Fetch recent reviews
+        $reviews = $this->db->table('reviews r')
+            ->select('r.review_id, r.rating, r.review_text, r.created_at, u.full_name as reviewer_name')
+            ->join('bookings b', 'b.booking_id = r.booking_id', 'inner')
+            ->join('users u', 'u.user_id = b.tourist_id', 'inner')
+            ->where('b.guide_id', $formatted['guide_id'])
+            ->orderBy('r.review_id', 'DESC')
+            ->limit(5)
+            ->get()
+            ->getResultArray();
+
+        $formatted['recent_reviews'] = $reviews;
+
+        return $formatted;
+    }
+
+    /**
+     * Create guide in ACID transaction
+     */
+    public function createGuide(array $data, array $languageIds): array
+    {
+        // 1. Sanitize phone number (e.g. 08... or +62... -> 62...)
+        $phone = $this->normalizePhoneNumber((string) ($data['phone_number'] ?? ''));
+
+        // 2. Resolve guide_code
+        $guideCode = strtoupper(trim((string) ($data['guide_code'] ?? '')));
+        if ($guideCode === '') {
+            $nextRow = $this->db->query("SELECT 'TG-' || LPAD((COALESCE(MAX(SUBSTRING(guide_code FROM 4)::INT), 0) + 1)::TEXT, 3, '0') AS next_code FROM guides")->getRowArray();
+            $guideCode = $nextRow['next_code'] ?? 'TG-999';
+        }
+
+        $sql = "INSERT INTO guides (
+            guide_code, user_id, guide_name, agency_name, gmaps_rating, gmaps_review_count,
+            basecamp_address, latitude, longitude, phone_number, daily_rate_idr,
+            availability_status, specialization_id, primary_destination_id, recommended_culinary_id,
+            partner_hotel_id, default_transport_id, version
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1) RETURNING guide_id";
+
+        $res = $this->db->query($sql, [
+            $guideCode,
+            ! empty($data['user_id']) ? (int) $data['user_id'] : null,
+            trim((string) ($data['guide_name'] ?? '')),
+            trim((string) ($data['agency_name'] ?? 'Pemandu Mandiri Medan')),
+            (float) ($data['gmaps_rating'] ?? 5.0),
+            (int) ($data['gmaps_review_count'] ?? 0),
+            trim((string) ($data['basecamp_address'] ?? 'Medan, Sumatera Utara')),
+            (float) ($data['latitude'] ?? 3.5952),
+            (float) ($data['longitude'] ?? 98.6722),
+            $phone,
+            (int) ($data['daily_rate_idr'] ?? 500000),
+            trim((string) ($data['availability_status'] ?? 'Tersedia')),
+            (int) ($data['specialization_id'] ?? 1),
+            ! empty($data['primary_destination_id']) ? (int) $data['primary_destination_id'] : null,
+            ! empty($data['recommended_culinary_id']) ? (int) $data['recommended_culinary_id'] : null,
+            ! empty($data['partner_hotel_id']) ? (int) $data['partner_hotel_id'] : null,
+            ! empty($data['default_transport_id']) ? (int) $data['default_transport_id'] : null,
+        ]);
+
+        $row = $res->getRowArray();
+        $guideId = (int) ($row['guide_id'] ?? 0);
+
+        // 3. Insert languages
+        if (! empty($languageIds)) {
+            $langInserts = [];
+            foreach (array_unique($languageIds) as $lid) {
+                if ((int) $lid > 0) {
+                    $langInserts[] = [
+                        'guide_id'    => $guideId,
+                        'language_id' => (int) $lid,
+                    ];
+                }
+            }
+            if (! empty($langInserts)) {
+                $this->db->table('guide_languages')->insertBatch($langInserts);
+            }
+        }
+
+        return $this->getGuideDetail($guideId);
+    }
+
+    /**
+     * Update guide with Optimistic Locking
+     */
+    public function updateGuide(int $guideId, array $data, ?array $languageIds, int $expectedVersion): array
+    {
+        $phone = isset($data['phone_number']) ? $this->normalizePhoneNumber((string) $data['phone_number']) : null;
+
+        $updateCols = [];
+        $binds = [];
+
+        $fields = [
+            'guide_name', 'agency_name', 'basecamp_address', 'latitude', 'longitude',
+            'daily_rate_idr', 'availability_status', 'specialization_id',
+            'primary_destination_id', 'recommended_culinary_id', 'partner_hotel_id',
+            'default_transport_id',
+        ];
+
+        foreach ($fields as $field) {
+            if (array_key_exists($field, $data)) {
+                $updateCols[] = "{$field} = ?";
+                $binds[] = $data[$field];
+            }
+        }
+
+        if ($phone !== null) {
+            $updateCols[] = 'phone_number = ?';
+            $binds[] = $phone;
+        }
+
+        if (empty($updateCols)) {
+            return $this->getGuideDetail($guideId);
+        }
+
+        // Add version increment
+        $updateCols[] = 'version = version + 1';
+
+        $setClause = implode(', ', $updateCols);
+        $sql = "UPDATE guides SET {$setClause} WHERE guide_id = ? AND version = ? RETURNING guide_id, version";
+        $binds[] = $guideId;
+        $binds[] = $expectedVersion;
+
+        $query = $this->db->query($sql, $binds);
+        if ($this->db->affectedRows() === 0) {
+            // Check if guide exists
+            $exists = $this->db->table('guides')->where('guide_id', $guideId)->countAllResults();
+            if ($exists > 0) {
+                throw new DatabaseException('OPTIMISTIC_LOCK_CONFLICT (40001): Data pemandu wisata telah diubah oleh pengguna lain. Silakan muat ulang.');
+            }
+            throw new DatabaseException("Pemandu wisata dengan ID {$guideId} tidak ditemukan.");
+        }
+
+        // Sync languages if provided
+        if ($languageIds !== null) {
+            $this->db->table('guide_languages')->where('guide_id', $guideId)->delete();
+            $langInserts = [];
+            foreach (array_unique($languageIds) as $lid) {
+                if ((int) $lid > 0) {
+                    $langInserts[] = [
+                        'guide_id'    => $guideId,
+                        'language_id' => (int) $lid,
+                    ];
+                }
+            }
+            if (! empty($langInserts)) {
+                $this->db->table('guide_languages')->insertBatch($langInserts);
+            }
+        }
+
+        return $this->getGuideDetail($guideId);
+    }
+
+    /**
+     * Delete guide
+     */
+    public function deleteGuide(int $guideId): bool
+    {
+        $this->db->table('guide_languages')->where('guide_id', $guideId)->delete();
+        $this->db->table('guides')->where('guide_id', $guideId)->delete();
+
+        return $this->db->affectedRows() > 0;
+    }
+
+    /**
+     * Summary stats for dashboards
      */
     public function getSummaryStats(): array
     {
-        $total = $this->db->table('tour_guides')->countAllResults();
-        $available = $this->db->table('tour_guides')
-            ->where('status_ketersediaan', 'Tersedia')
-            ->countAllResults();
+        $total = $this->db->table('guides')->countAllResults();
+        $available = $this->db->table('guides')->where('availability_status', 'Tersedia')->countAllResults();
+        $booked = $this->db->table('guides')->where('availability_status', 'Booked')->countAllResults();
+        $onDuty = $this->db->table('guides')->where('availability_status', 'Sedang Bertugas')->countAllResults();
 
-        $avgRow = $this->db->query('SELECT ROUND(AVG(rating_gmaps), 2) AS avg_rating, ROUND(AVG(tarif_per_hari_idr), 0) AS avg_price FROM tour_guides')->getRowArray();
+        $avgRow = $this->db->query('SELECT ROUND(AVG(gmaps_rating), 2) AS avg_rating, ROUND(AVG(daily_rate_idr), 0) AS avg_rate FROM guides')->getRowArray();
+
+        $specs = $this->db->table('guides g')
+            ->select('ts.specialization_name, COUNT(g.guide_id) as count')
+            ->join('tour_specializations ts', 'ts.specialization_id = g.specialization_id', 'left')
+            ->groupBy('ts.specialization_name')
+            ->get()
+            ->getResultArray();
+
+        $totalBookings = $this->db->table('bookings')->countAllResults();
 
         return [
-            'total_guides'     => $total,
-            'available_guides' => $available,
-            'avg_rating'       => (float) ($avgRow['avg_rating'] ?? 4.74),
-            'avg_price'        => (int) ($avgRow['avg_price'] ?? 515500),
+            'total_guides'        => $total,
+            'available_guides'    => $available,
+            'booked_guides'       => $booked,
+            'on_duty_guides'      => $onDuty,
+            'avg_rating'          => (float) ($avgRow['avg_rating'] ?? 4.74),
+            'avg_rate_idr'        => (int) ($avgRow['avg_rate'] ?? 515500),
+            'total_bookings'      => $totalBookings,
+            'by_specialization'   => $specs,
+        ];
+    }
+
+    /**
+     * Sanitize phone number to standard 62...
+     */
+    private function normalizePhoneNumber(string $phone): string
+    {
+        $clean = preg_replace('/[^0-9]/', '', $phone);
+        if (str_starts_with($clean, '08')) {
+            $clean = '62' . substr($clean, 1);
+        } elseif (str_starts_with($clean, '8')) {
+            $clean = '62' . $clean;
+        }
+        return $clean;
+    }
+
+    /**
+     * Format row from vw_guides_detail for JSON
+     */
+    private function formatGuideRow(array $r): array
+    {
+        $languages = [];
+        if (isset($r['languages_json'])) {
+            $languages = is_string($r['languages_json']) ? json_decode($r['languages_json'], true) : $r['languages_json'];
+        }
+
+        // Convert PostgreSQL integer array format string "{1,2}" if needed
+        $langIds = [];
+        if (isset($r['language_ids'])) {
+            if (is_array($r['language_ids'])) {
+                $langIds = array_map('intval', $r['language_ids']);
+            } elseif (is_string($r['language_ids'])) {
+                $clean = trim($r['language_ids'], '{}');
+                $langIds = ($clean === '') ? [] : array_map('intval', explode(',', $clean));
+            }
+        }
+
+        return [
+            'guide_id'                => (int) $r['guide_id'],
+            'guide_code'              => $r['guide_code'],
+            'guide_name'              => $r['guide_name'],
+            'agency_name'             => $r['agency_name'],
+            'gmaps_rating'            => (float) $r['gmaps_rating'],
+            'gmaps_review_count'       => (int) $r['gmaps_review_count'],
+            'basecamp_address'        => $r['basecamp_address'],
+            'latitude'                => (float) $r['latitude'],
+            'longitude'               => (float) $r['longitude'],
+            'phone_number'            => $r['phone_number'],
+            'daily_rate_idr'          => (int) $r['daily_rate_idr'],
+            'availability_status'     => $r['availability_status'],
+            'version'                 => (int) $r['version'],
+            'specialization'          => [
+                'id'          => $r['specialization_id'] ? (int) $r['specialization_id'] : null,
+                'name'        => $r['specialization_name'],
+            ],
+            'primary_destination'     => [
+                'id'          => ! empty($r['primary_destination_id']) ? (int) $r['primary_destination_id'] : null,
+                'code'        => $r['destination_code'] ?? null,
+                'name'        => $r['destination_name'] ?? null,
+            ],
+            'recommended_culinary'    => [
+                'id'          => ! empty($r['recommended_culinary_id']) ? (int) $r['recommended_culinary_id'] : null,
+                'code'        => $r['culinary_code'] ?? null,
+                'name'        => $r['culinary_name'] ?? null,
+            ],
+            'partner_hotel'           => [
+                'id'          => ! empty($r['partner_hotel_id']) ? (int) $r['partner_hotel_id'] : null,
+                'code'        => $r['hotel_code'] ?? null,
+                'name'        => $r['hotel_name'] ?? null,
+            ],
+            'default_transport'       => [
+                'id'          => ! empty($r['default_transport_id']) ? (int) $r['default_transport_id'] : null,
+                'code'        => $r['transport_code'] ?? null,
+                'name'        => $r['transport_name'] ?? null,
+            ],
+            'languages'               => $languages,
+            'language_ids'            => $langIds,
+            'spoken_languages'        => $r['spoken_languages'] ?? '',
+            'internal_reviews'        => [
+                'avg_rating'   => $r['internal_avg_rating'] !== null ? (float) $r['internal_avg_rating'] : null,
+                'review_count' => (int) ($r['internal_review_count'] ?? 0),
+            ],
         ];
     }
 }

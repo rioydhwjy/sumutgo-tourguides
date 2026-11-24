@@ -1,0 +1,440 @@
+{
+  "info": {
+    "_postman_id": "a9c2f6d8-3b1e-4589-9d7a-18f3a5b89021",
+    "name": "SumutGo Tour Guides - RESTful Web API v1",
+    "description": "Dokumentasi RESTful Web API v1 SumutGo Tour Guides (CodeIgniter 4.7 + PostgreSQL 17 Supabase). Dilengkapi JWT HS256, RBAC, Rate Limiting, Optimistic Locking, dan Error Mapping.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "admin_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "tourist_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01. Authentication",
+      "item": [
+        {
+          "name": "Login Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.status === 'success' && jsonData.data && jsonData.data.token) {",
+                  "    pm.collectionVariables.set('admin_token', jsonData.data.token);",
+                  "    console.log('Admin token saved successfully');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@sumutgo.id\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Login Wisatawan",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.status === 'success' && jsonData.data && jsonData.data.token) {",
+                  "    pm.collectionVariables.set('tourist_token', jsonData.data.token);",
+                  "    console.log('Tourist token saved successfully');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"wisatawan@gmail.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "login"]
+            }
+          }
+        },
+        {
+          "name": "Register Wisatawan Baru",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"full_name\": \"Budi Santoso\",\n  \"email\": \"budi.santoso@gmail.com\",\n  \"password\": \"Password123!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/register",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "register"]
+            }
+          }
+        },
+        {
+          "name": "Get Profile Pengguna Aktif (/me)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "me"]
+            }
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "auth", "logout"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "02. Master Data",
+      "item": [
+        {
+          "name": "Get Seluruh Master Data (Dropdown UI)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/master/all",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "master", "all"]
+            }
+          }
+        },
+        {
+          "name": "Get Spesialisasi Tur",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/master/specializations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "master", "specializations"]
+            }
+          }
+        },
+        {
+          "name": "Get Destinasi Wisata",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/master/destinations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "master", "destinations"]
+            }
+          }
+        },
+        {
+          "name": "Tambah Destinasi Baru (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination_code\": \"WST-99\",\n  \"destination_name\": \"Air Terjun Sipiso-piso\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/master/destinations",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "master", "destinations"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "03. Tour Guides",
+      "item": [
+        {
+          "name": "List Pemandu Wisata (Filter, Sort & Pagination)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/guides?page=1&per_page=15&status=Tersedia&sort=rating_desc",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guides"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "15" },
+                { "key": "status", "value": "Tersedia" },
+                { "key": "sort", "value": "rating_desc" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Pencarian Cepat Guide (ILIKE pg_trgm)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/guides?q=sejarah",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guides"],
+              "query": [
+                { "key": "q", "value": "sejarah" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Detail Pemandu Wisata by ID/Code",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/guides/TG-001",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guides", "TG-001"]
+            }
+          }
+        },
+        {
+          "name": "Tambah Pemandu Wisata Baru (Admin)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guide_name\": \"Jhonny Situmorang\",\n  \"agency_name\": \"Medan Adventure Tours\",\n  \"phone_number\": \"081234567890\",\n  \"daily_rate_idr\": 550000,\n  \"specialization_id\": 1,\n  \"basecamp_address\": \"Jl. Balige No. 12, Medan\",\n  \"latitude\": 3.5852,\n  \"longitude\": 98.6722,\n  \"language_ids\": [1, 2, 4]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/guides",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guides"]
+            }
+          }
+        },
+        {
+          "name": "Update Pemandu Wisata - Optimistic Locking (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guide_name\": \"Jhonny Situmorang, S.Par\",\n  \"daily_rate_idr\": 600000,\n  \"version\": 1,\n  \"language_ids\": [1, 2, 4, 5]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/guides/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guides", "1"]
+            }
+          }
+        },
+        {
+          "name": "Hapus Pemandu Wisata (Admin)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/guides/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "guides", "1"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "04. Bookings",
+      "item": [
+        {
+          "name": "List Reservasi (Role Scoped)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{tourist_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings?page=1&per_page=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Detail Reservasi by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{tourist_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1"]
+            }
+          }
+        },
+        {
+          "name": "Buat Reservasi Baru (ACID Stored Function)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{tourist_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"guide_id\": 2,\n  \"start_date\": \"2026-12-01\",\n  \"end_date\": \"2026-12-03\",\n  \"number_of_guests\": 2,\n  \"destination_id\": 1,\n  \"transport_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings"]
+            }
+          }
+        },
+        {
+          "name": "Perbarui Status Booking - Optimistic Locking",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"confirmed\",\n  \"version\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/bookings/1/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "bookings", "1", "status"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "05. Reviews",
+      "item": [
+        {
+          "name": "List Seluruh Ulasan",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/reviews?page=1&per_page=10",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reviews"]
+            }
+          }
+        },
+        {
+          "name": "Kirim Ulasan (Hanya untuk Booking Completed)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{tourist_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"booking_id\": 1,\n  \"rating\": 5,\n  \"review_text\": \"Pelayanan sangat ramah dan menguasai sejarah Medan dengan mendalam!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/reviews",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "reviews"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Analytics & Audit Logs",
+      "item": [
+        {
+          "name": "Log Audit Sistem (Admin Only)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "audit-logs"]
+            }
+          }
+        },
+        {
+          "name": "Statistik Ringkasan Platform",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/stats",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "stats"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
