@@ -17,7 +17,7 @@ class TourGuideApiController extends ResourceController
     {
         $model = new TourGuideModel();
         $filters = [
-            'search'    => $this->request->getGet('search'),
+            'search'    => $this->request->getGet('search') ?? $this->request->getGet('q'),
             'spec'      => $this->request->getGet('spec'),
             'status'    => $this->request->getGet('status'),
             'lang'      => $this->request->getGet('lang'),
@@ -25,12 +25,12 @@ class TourGuideApiController extends ResourceController
             'sort'      => $this->request->getGet('sort'),
         ];
 
-        $data = $model->getFilteredGuides($filters);
+        $res = $model->getFilteredGuides($filters, 1, 150);
 
         return $this->respond([
             'status' => 200,
-            'count'  => count($data),
-            'data'   => $data,
+            'count'  => count($res['items']),
+            'data'   => $res['items'],
         ]);
     }
 
