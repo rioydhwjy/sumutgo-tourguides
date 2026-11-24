@@ -389,7 +389,43 @@ class TourGuideModel extends Model
             }
         }
 
+        $languageNames = [];
+        if (! empty($languages) && is_array($languages)) {
+            foreach ($languages as $l) {
+                if (is_array($l) && isset($l['language_name'])) {
+                    $languageNames[] = $l['language_name'];
+                } elseif (is_string($l)) {
+                    $languageNames[] = $l;
+                }
+            }
+        }
+
         return [
+            // Flat aliases for frontend backwards compatibility
+            'id'                      => $r['guide_code'],
+            'name'                    => $r['guide_name'],
+            'agency'                  => $r['agency_name'],
+            'rating'                  => (float) $r['gmaps_rating'],
+            'reviews'                 => (int) $r['gmaps_review_count'],
+            'address'                 => $r['basecamp_address'],
+            'district'                => 'Medan',
+            'lat'                     => (float) $r['latitude'],
+            'lng'                     => (float) $r['longitude'],
+            'phone'                   => $r['phone_number'],
+            'price'                   => (int) $r['daily_rate_idr'],
+            'status'                  => $r['availability_status'],
+            'specialization'          => $r['specialization_name'] ?? 'Umum',
+            'destId'                  => $r['primary_destination_id'] ?? null,
+            'destName'                => $r['destination_name'] ?? '',
+            'culinaryId'              => $r['recommended_culinary_id'] ?? null,
+            'culinaryName'            => $r['culinary_name'] ?? '',
+            'hotelId'                 => $r['partner_hotel_id'] ?? null,
+            'hotelName'               => $r['hotel_name'] ?? '',
+            'transportId'             => $r['default_transport_id'] ?? null,
+            'transportName'           => $r['transport_name'] ?? '',
+            'languages'               => $languageNames,
+
+            // REST API v1 structured fields
             'guide_id'                => (int) $r['guide_id'],
             'guide_code'              => $r['guide_code'],
             'guide_name'              => $r['guide_name'],
@@ -403,7 +439,7 @@ class TourGuideModel extends Model
             'daily_rate_idr'          => (int) $r['daily_rate_idr'],
             'availability_status'     => $r['availability_status'],
             'version'                 => (int) $r['version'],
-            'specialization'          => [
+            'specialization_detail'   => [
                 'id'          => $r['specialization_id'] ? (int) $r['specialization_id'] : null,
                 'name'        => $r['specialization_name'],
             ],
