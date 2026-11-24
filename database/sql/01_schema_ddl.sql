@@ -211,14 +211,15 @@ CREATE TABLE IF NOT EXISTS audit_logs (
     audit_id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     entity_type VARCHAR(20) NOT NULL,
     entity_id INT NOT NULL,
-    action VARCHAR(50) NOT NULL,
-    old_status VARCHAR(50) NULL,
-    new_status VARCHAR(50) NULL,
+    action VARCHAR(10) NOT NULL,
+    old_status VARCHAR(20) NULL,
+    new_status VARCHAR(20) NULL,
     old_data JSONB NULL,
     new_data JSONB NULL,
     changed_by BIGINT NULL,
     changed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    CONSTRAINT chk_audit_entity_type CHECK (entity_type IN ('booking', 'guide')),
+    CONSTRAINT chk_audit_logs_entity CHECK (entity_type IN ('booking', 'guide')),
+    CONSTRAINT chk_audit_logs_action CHECK (action IN ('INSERT', 'UPDATE', 'DELETE')),
     CONSTRAINT fk_audit_changed_by FOREIGN KEY (changed_by) REFERENCES users(user_id) ON DELETE SET NULL
 );
 
