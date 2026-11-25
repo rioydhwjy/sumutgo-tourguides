@@ -41,7 +41,7 @@ class TourGuideModel extends Model
     public function getFilteredGuides(array $filters = [], int $page = 1, int $perPage = 15): array
     {
         $page = max(1, $page);
-        $perPage = min(100, max(1, $perPage));
+        $perPage = min(500, max(1, $perPage));
         $offset = ($page - 1) * $perPage;
 
         $builder = $this->db->table('vw_guides_detail');
@@ -400,6 +400,11 @@ class TourGuideModel extends Model
             }
         }
 
+        $district = 'Kota Medan';
+        if (! empty($r['basecamp_address']) && preg_match('/Kec\.\s*([^,]+)/i', (string) $r['basecamp_address'], $matches)) {
+            $district = trim($matches[1]);
+        }
+
         return [
             // Flat aliases for frontend backwards compatibility
             'id'                      => $r['guide_code'],
@@ -408,22 +413,22 @@ class TourGuideModel extends Model
             'rating'                  => (float) $r['gmaps_rating'],
             'reviews'                 => (int) $r['gmaps_review_count'],
             'address'                 => $r['basecamp_address'],
-            'district'                => 'Medan',
+            'district'                => $district,
             'lat'                     => (float) $r['latitude'],
             'lng'                     => (float) $r['longitude'],
             'phone'                   => $r['phone_number'],
             'price'                   => (int) $r['daily_rate_idr'],
             'status'                  => $r['availability_status'],
             'specialization'          => $r['specialization_name'] ?? 'Umum',
-            'destId'                  => $r['primary_destination_id'] ?? null,
+            'destId'                  => $r['destination_code'] ?? ($r['primary_destination_id'] ?? null),
             'destName'                => $r['destination_name'] ?? '',
-            'culinaryId'              => $r['recommended_culinary_id'] ?? null,
+            'culinaryId'              => $r['culinary_code'] ?? ($r['recommended_culinary_id'] ?? null),
             'culinaryName'            => $r['culinary_name'] ?? '',
-            'hotelId'                 => $r['partner_hotel_id'] ?? null,
+            'hotelId'                 => $r['hotel_code'] ?? ($r['partner_hotel_id'] ?? null),
             'hotelName'               => $r['hotel_name'] ?? '',
-            'transportId'             => $r['default_transport_id'] ?? null,
+            'transportId'             => $r['transport_code'] ?? ($r['default_transport_id'] ?? null),
             'transportName'           => $r['transport_name'] ?? '',
-            'languages'               => $languageNames,
+            'language_names'          => $languageNames,
 
             // REST API v1 structured fields
             'guide_id'                => (int) $r['guide_id'],

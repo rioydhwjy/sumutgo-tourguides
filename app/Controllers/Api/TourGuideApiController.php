@@ -16,13 +16,18 @@ class TourGuideApiController extends ResourceController
     public function index()
     {
         $model = new TourGuideModel();
+        $sort = $this->request->getGet('sort');
+        if ($sort === 'price_asc') {
+            $sort = 'rate_asc';
+        } elseif ($sort === 'price_desc') {
+            $sort = 'rate_desc';
+        }
+
         $filters = [
-            'search'    => $this->request->getGet('search') ?? $this->request->getGet('q'),
-            'spec'      => $this->request->getGet('spec'),
-            'status'    => $this->request->getGet('status'),
-            'lang'      => $this->request->getGet('lang'),
-            'max_price' => $this->request->getGet('max_price'),
-            'sort'      => $this->request->getGet('sort'),
+            'q'        => $this->request->getGet('search') ?? $this->request->getGet('q'),
+            'status'   => $this->request->getGet('status'),
+            'max_rate' => $this->request->getGet('max_price') ?? $this->request->getGet('max_rate'),
+            'sort'     => $sort,
         ];
 
         $res = $model->getFilteredGuides($filters, 1, 150);
@@ -87,11 +92,11 @@ class TourGuideApiController extends ResourceController
         $tourDate = trim((string) ($payload['tour_date'] ?? date('Y-m-d')));
         $days     = max(1, (int) ($payload['duration_days'] ?? 1));
 
-        $model->update($guide['id'], [
-            'status_ketersediaan' => 'Booked',
+        $model->update($guide['guide_id'], [
+            'availability_status' => 'Booked',
         ]);
 
-        $updated = $model->getGuideDetail($guide['id']);
+        $updated = $model->getGuideDetail($guide['guide_id']);
 
         return $this->respond([
             'status'  => 200,
@@ -124,21 +129,21 @@ class TourGuideApiController extends ResourceController
         }
 
         $payload   = $this->request->getJSON(true) ?? $this->request->getRawInput();
-        $newStatus = trim((string) ($payload['status_ketersediaan'] ?? ''));
+        $newStatus = trim((string) ($payload['availability_status'] ?? $payload['status_ketersediaan'] ?? ''));
 
         $allowed = ['Tersedia', 'Sedang Bertugas', 'Booked'];
         if (! in_array($newStatus, $allowed, true)) {
             return $this->failValidationErrors('Status harus salah satu dari: Tersedia, Sedang Bertugas, atau Booked.');
         }
 
-        $model->update($guide['id'], [
-            'status_ketersediaan' => $newStatus,
+        $model->update($guide['guide_id'], [
+            'availability_status' => $newStatus,
         ]);
 
         return $this->respond([
             'status'  => 200,
             'message' => "Status {$guide['id']} berhasil diperbarui menjadi {$newStatus}.",
-            'data'    => $model->getGuideDetail($guide['id']),
+            'data'    => $model->getGuideDetail($guide['guide_id']),
         ]);
     }
 }
