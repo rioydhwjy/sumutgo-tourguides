@@ -18,7 +18,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><?= esc($title ?? 'lokale.tour | Pemandu Wisata Lokal Medan, Menemani Perjalananmu') ?></title>
+  <title><?= esc($title ?? 'SumutGO | Pemandu Wisata Lokal Medan, Menemani Perjalananmu') ?></title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -70,7 +70,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           </svg>
         </div>
         <div class="leading-none">
-          <span class="font-display font-extrabold text-2xl tracking-tight text-lokale">lokale<span class="text-ink font-semibold text-lg">.tour</span></span>
+          <span class="font-display font-extrabold text-2xl tracking-tight text-lokale">Sumut<span class="text-ink font-extrabold">GO</span></span>
           <span class="block text-[10px] tracking-[0.18em] text-muted uppercase mt-0.5">Medan Tour Guide</span>
         </div>
       </a>
@@ -125,7 +125,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                 <span class="text-lokale">yang Setia.</span>
               </h1>
               <p class="text-sm sm:text-base text-muted leading-relaxed max-w-xl">
-                Jelajah sejarah Kesawan, berburu kuliner malam Medan, atau menyusuri keindahan Danau Toba dan Bukit Lawang—Teman lokale nggak pernah jalan sendirian. Kami selalu sedia pemandu lokal ramah dan senyum hangat untuk merayakan setiap langkah perjalananmu.
+                Jelajah sejarah Kesawan, berburu kuliner malam Medan, atau menyusuri keindahan Danau Toba dan Bukit Lawang—Teman SumutGO nggak pernah jalan sendirian. Kami selalu sedia pemandu lokal ramah dan senyum hangat untuk merayakan setiap langkah perjalananmu.
               </p>
               <div class="flex flex-wrap items-center gap-3 pt-2">
                 <a href="#direktori-pemandu" class="px-7 py-3.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-semibold text-sm shadow-lg shadow-lokale/25 transition">
@@ -506,7 +506,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
   <footer class="bg-lokaledeep text-white pt-14 pb-10 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-10 pb-10 border-b border-white/15">
       <div class="md:col-span-5 space-y-3">
-        <span class="font-display font-extrabold text-2xl tracking-tight text-white">lokale<span class="text-sky-300 font-semibold text-lg">.tour</span></span>
+        <span class="font-display font-extrabold text-2xl tracking-tight text-white">Sumut<span class="text-sky-300 font-extrabold">GO</span></span>
         <p class="text-xs text-sky-100/80 leading-relaxed">Dari Kota Medan hingga ke Danau Toba dan Bukit Lawang, kami tumbuh jadi teman perjalanan yang setia menemani setiap langkah wisatamu.</p>
       </div>
       <div class="md:col-span-3 space-y-2 text-xs">
@@ -520,7 +520,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       </div>
     </div>
     <div class="max-w-7xl mx-auto pt-6 text-[11px] text-sky-200/70 flex justify-between">
-      <span>© Copyright 2026 lokale.tour Medan. All Rights Reserved.</span>
+      <span>© Copyright 2026 SumutGO Medan. All Rights Reserved.</span>
     </div>
   </footer>
 
