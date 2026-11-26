@@ -28,7 +28,7 @@ class TourGuideController extends BaseController
         $transports = $masterModel->getItems('transports');
 
         return view('tour_guides/index', [
-            'title'           => 'SUMUT GO — Enterprise Tour Guide Management & GIS Portal',
+            'title'           => 'SumutGO — Pemandu Wisata Resmi Medan & Sumatera Utara',
             'guides'          => $guides,
             'stats'           => $stats,
             'specializations' => $specializations,
@@ -37,6 +37,20 @@ class TourGuideController extends BaseController
             'culinaries'      => $culinaries,
             'hotels'          => $hotels,
             'transports'      => $transports,
+        ]);
+    }
+
+    public function admin(): string
+    {
+        $model = new TourGuideModel();
+        $res = $model->getFilteredGuides([], 1, 150);
+        $guides = $res['items'];
+        $stats = $model->getSummaryStats();
+
+        return view('tour_guides/admin', [
+            'title'  => 'SumutGO — Portal Admin, Live API & SQL',
+            'guides' => $guides,
+            'stats'  => $stats,
         ]);
     }
 }

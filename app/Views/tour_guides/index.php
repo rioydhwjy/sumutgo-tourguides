@@ -79,8 +79,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         <button type="button" data-main-tab="directory" class="main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition bg-lokale text-white shadow-sm">Beranda &amp; Pemandu</button>
         <button type="button" data-main-tab="map" class="main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition text-ink/80 hover:text-lokale">Peta Basecamp</button>
         <button type="button" data-main-tab="planner" class="main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition text-ink/80 hover:text-lokale">Kalkulator Trip</button>
-        <button type="button" data-main-tab="analytics" class="main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition text-ink/80 hover:text-lokale">Analitik &amp; Mitra</button>
-        <button type="button" data-main-tab="admin" class="main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition text-ink/80 hover:text-lokale">Admin &amp; API</button>
+        <button type="button" data-main-tab="analytics" class="main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition text-ink/80 hover:text-lokale">Destinasi &amp; Mitra</button>
       </nav>
 
       <div class="flex items-center gap-2">
@@ -92,9 +91,6 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           <span class="text-rose-500">♥</span>
           <span id="favCountBadge" class="font-mono text-[11px]">0</span>
         </button>
-        <button id="btnOpenSqlModalTop" type="button" class="hidden sm:inline-flex px-4 py-2 rounded-full bg-lokale hover:bg-lokaledark text-white text-xs font-semibold shadow-sm transition">
-          SQL Query
-        </button>
       </div>
     </div>
 
@@ -102,8 +98,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       <button type="button" data-main-tab="directory" class="main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokale text-white">Beranda &amp; Pemandu</button>
       <button type="button" data-main-tab="map" class="main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokalesoft text-lokale">Peta Basecamp</button>
       <button type="button" data-main-tab="planner" class="main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokalesoft text-lokale">Kalkulator Trip</button>
-      <button type="button" data-main-tab="analytics" class="main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokalesoft text-lokale">Analitik &amp; Mitra</button>
-      <button type="button" data-main-tab="admin" class="main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokalesoft text-lokale">Admin &amp; API</button>
+      <button type="button" data-main-tab="analytics" class="main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokalesoft text-lokale">Destinasi &amp; Mitra</button>
     </div>
   </header>
 
@@ -194,7 +189,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                 <img src="<?= base_url('assets/img/card_toba.jpg') ?>" alt="Danau Toba" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
               </div>
               <div class="pt-4 pb-2 px-2">
-                <span class="text-[11px] font-mono text-lokale font-semibold">WST-19 • WST-22</span>
+                <span class="text-[11px] font-semibold text-lokale">Wisata Alam &amp; Budaya</span>
                 <h3 class="font-display font-bold text-base text-ink group-hover:text-lokale transition mt-0.5">Danau Toba &amp; Holbung</h3>
                 <p class="text-xs text-muted mt-1">Panorama Kaldera Toba &amp; budaya Batak Samosir.</p>
               </div>
@@ -205,7 +200,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                 <img src="<?= base_url('assets/img/card_tangkahan.jpg') ?>" alt="Tangkahan" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
               </div>
               <div class="pt-4 pb-2 px-2">
-                <span class="text-[11px] font-mono text-lokale font-semibold">WST-13 • WST-14</span>
+                <span class="text-[11px] font-semibold text-lokale">Ekowisata Hutan Tropis</span>
                 <h3 class="font-display font-bold text-base text-ink group-hover:text-lokale transition mt-0.5">Tangkahan &amp; Leuser</h3>
                 <p class="text-xs text-muted mt-1">Konservasi gajah Sumatera &amp; trekking orangutan.</p>
               </div>
@@ -216,7 +211,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                 <img src="<?= base_url('assets/img/card_sipisopiso.jpg') ?>" alt="Sipiso-piso" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
               </div>
               <div class="pt-4 pb-2 px-2">
-                <span class="text-[11px] font-mono text-lokale font-semibold">WST-17 • WST-18</span>
+                <span class="text-[11px] font-semibold text-lokale">Dataran Tinggi Karo</span>
                 <h3 class="font-display font-bold text-base text-ink group-hover:text-lokale transition mt-0.5">Berastagi &amp; Sipiso-piso</h3>
                 <p class="text-xs text-muted mt-1">Dataran tinggi Karo, Sibayak &amp; air terjun ikonik.</p>
               </div>
@@ -227,7 +222,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                 <img src="<?= base_url('assets/img/card_heritage.jpg') ?>" alt="Istana Maimun" class="w-full h-full object-cover group-hover:scale-105 transition duration-500" />
               </div>
               <div class="pt-4 pb-2 px-2">
-                <span class="text-[11px] font-mono text-lokale font-semibold">WST-01 • WST-02</span>
+                <span class="text-[11px] font-semibold text-lokale">Sejarah &amp; Kuliner Kota</span>
                 <h3 class="font-display font-bold text-base text-ink group-hover:text-lokale transition mt-0.5">Kesawan &amp; Istana Maimun</h3>
                 <p class="text-xs text-muted mt-1">Jejak Kesultanan Deli, Tjong A Fie &amp; kuliner khas.</p>
               </div>
@@ -321,13 +316,13 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
               <table class="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr class="bg-lokalesoft border-b border-lokaleborder text-lokaledeep uppercase text-[10px] font-mono">
-                    <th class="py-3.5 px-3">ID</th>
+                    <th class="py-3.5 px-3">Kode</th>
                     <th class="py-3.5 px-3">Pemandu &amp; Agensi</th>
                     <th class="py-3.5 px-3">Spesialisasi</th>
                     <th class="py-3.5 px-3">Rating</th>
                     <th class="py-3.5 px-3">Bahasa</th>
-                    <th class="py-3.5 px-3">Wisata &amp; Kuliner</th>
-                    <th class="py-3.5 px-3">Hotel &amp; Transport</th>
+                    <th class="py-3.5 px-3">Destinasi Utama</th>
+                    <th class="py-3.5 px-3">Hotel &amp; Armada</th>
                     <th class="py-3.5 px-3">Tarif/Hari</th>
                     <th class="py-3.5 px-3">Status</th>
                     <th class="py-3.5 px-3 text-right">Aksi</th>
@@ -364,20 +359,20 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         </div>
       </div>
 
-      <!-- MARI MELANGKAH BERSAMA (MIRRORS LOKALE PARTNERSHIP CTA) -->
+      <!-- PAKET LENGKAP WISATA SUMATERA UTARA -->
       <div class="py-16 px-4 sm:px-6 lg:px-8 bg-white">
         <div class="max-w-7xl mx-auto rounded-[2rem] bg-lokale text-white p-8 sm:p-14 shadow-xl shadow-lokale/20">
           <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 items-center">
             <div class="lg:col-span-8 space-y-3">
-              <span class="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">Ekosistem Terintegrasi 5 Kelompok</span>
-              <h2 class="font-display font-extrabold text-3xl sm:text-4xl leading-tight">Mari Melangkah Bersama</h2>
+              <span class="text-xs font-bold uppercase tracking-[0.2em] text-sky-200">Paket Wisata Lengkap Sumatera Utara</span>
+              <h2 class="font-display font-extrabold text-3xl sm:text-4xl leading-tight">Jelajah Sumut Lebih Nyaman &amp; Terencana</h2>
               <p class="text-sm sm:text-base text-sky-50/90 max-w-2xl leading-relaxed">
-                Satukan langkah untuk pariwisata Sumatera Utara. Sistem Pemandu Wisata (Kelompok 2) terhubung via RESTful API JSON dengan Kelompok Wisata (WST), Kuliner (KLN), Penginapan (HTL), dan Transportasi (TRP).
+                Setiap pemandu SumutGO telah terhubung dengan rekomendasi destinasi wisata unggulan, kuliner autentik, penginapan terpercaya, serta armada transportasi nyaman untuk menemani perjalanan Anda.
               </p>
             </div>
             <div class="lg:col-span-4 flex lg:justify-end">
               <button type="button" id="btnPartnershipOpenEco" class="px-8 py-3.5 rounded-full bg-white hover:bg-sand text-lokale font-bold text-sm shadow-lg transition">
-                Lihat Integrasi Kemitraan
+                Lihat Daftar Destinasi &amp; Mitra
               </button>
             </div>
           </div>
@@ -455,17 +450,15 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       </div>
     </section>
 
-    <!-- TAB 4: ANALITIK & MITRA 5 KELOMPOK -->
+    <!-- TAB 4: DESTINASI & MITRA PERJALANAN -->
     <section id="view-analytics" class="hidden py-10 px-4 sm:px-6 lg:px-8 bg-lokalesoft/30 min-h-[75vh]">
       <div class="max-w-7xl mx-auto space-y-6">
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          <div class="bg-white rounded-3xl border border-lokaleborder p-5 shadow-sm"><h3 class="text-xs font-bold uppercase text-lokale mb-3">Rata-Rata Tarif Spesialisasi</h3><div class="relative h-64"><canvas id="chartSpecializations"></canvas></div></div>
-          <div class="bg-white rounded-3xl border border-lokaleborder p-5 shadow-sm"><h3 class="text-xs font-bold uppercase text-lokale mb-3">Cakupan <?= $totalLanguages ?> Bahasa</h3><div class="relative h-64"><canvas id="chartLanguages"></canvas></div></div>
-          <div class="bg-white rounded-3xl border border-lokaleborder p-5 shadow-sm"><h3 class="text-xs font-bold uppercase text-lokale mb-3">Status Ketersediaan</h3><div class="relative h-64"><canvas id="chartStatuses"></canvas></div></div>
-        </div>
         <div class="bg-white rounded-3xl border border-lokaleborder p-6 shadow-sm space-y-4">
           <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
-            <h2 class="font-display font-extrabold text-xl text-ink">Hub Integrasi Lintas 5 Kelompok</h2>
+            <div>
+              <h2 class="font-display font-extrabold text-xl text-ink">Direktori Destinasi &amp; Mitra Perjalanan</h2>
+              <p class="text-xs text-muted mt-0.5">Pilih destinasi, kuliner, hotel, atau armada untuk melihat pemandu yang melayaninya.</p>
+            </div>
             <div class="flex flex-wrap gap-1.5 bg-lokalesoft p-1 rounded-full border border-lokaleborder">
               <button type="button" data-eco-tab="destinations" class="eco-tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-lokale text-white transition">Wisata (<?= count($destinations ?? []) ?>)</button>
               <button type="button" data-eco-tab="culinaries" class="eco-tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale transition">Kuliner (<?= count($culinaries ?? []) ?>)</button>
@@ -475,34 +468,16 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           </div>
           <div id="ecosystemEntitiesGrid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5"></div>
         </div>
-      </div>
-    </section>
-
-    <!-- TAB 5: ADMIN & API -->
-    <section id="view-admin" class="hidden py-10 px-4 sm:px-6 lg:px-8 bg-lokalesoft/30 min-h-[75vh]">
-      <div class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div class="lg:col-span-5 bg-white rounded-3xl border border-lokaleborder p-6 shadow-sm space-y-3 text-xs">
-          <h2 class="font-display font-extrabold text-xl text-ink">Status Reservasi &amp; Update Cepat</h2>
-          <p class="text-muted">Klik tombol <strong>Set Tersedia</strong> untuk langsung memperbarui status pemandu di database PostgreSQL melalui endpoint <code>PUT /api/tour-guides/{id}/status</code>.</p>
-          <div id="adminActionFeedback" class="hidden p-2.5 rounded-xl border text-[11px] font-medium"></div>
-          <div id="bookingLedgerList" class="max-h-96 overflow-y-auto divide-y divide-slate-100"></div>
-        </div>
-        <div class="lg:col-span-7 bg-white rounded-3xl border border-lokaleborder p-6 shadow-sm space-y-3">
-          <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
-            <h3 class="font-display font-bold text-base text-ink">Live RESTful API CodeIgniter 4</h3>
-            <div class="flex gap-1.5">
-              <button type="button" data-api-test="list" class="api-test-btn px-3 py-1.5 rounded-full bg-lokale text-white font-mono text-[11px]">GET /api/tour-guides</button>
-              <button type="button" data-api-test="stats" class="api-test-btn px-3 py-1.5 rounded-full bg-lokalesoft text-lokale font-mono text-[11px]">GET /stats</button>
-              <button type="button" data-api-test="detail" class="api-test-btn px-3 py-1.5 rounded-full bg-lokalesoft text-lokale font-mono text-[11px]">GET /TG-001</button>
-            </div>
-          </div>
-          <pre id="apiSandboxOutput" class="bg-slate-900 text-sky-200 rounded-2xl p-4 font-mono text-[11px] max-h-96 overflow-y-auto"></pre>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          <div class="bg-white rounded-3xl border border-lokaleborder p-5 shadow-sm"><h3 class="text-xs font-bold uppercase text-lokale mb-3">Rata-Rata Tarif Minat Wisata (Ribu Rp)</h3><div class="relative h-64"><canvas id="chartSpecializations"></canvas></div></div>
+          <div class="bg-white rounded-3xl border border-lokaleborder p-5 shadow-sm"><h3 class="text-xs font-bold uppercase text-lokale mb-3">Bahasa yang Dikuasai (<?= $totalLanguages ?> Bahasa)</h3><div class="relative h-64"><canvas id="chartLanguages"></canvas></div></div>
+          <div class="bg-white rounded-3xl border border-lokaleborder p-5 shadow-sm"><h3 class="text-xs font-bold uppercase text-lokale mb-3">Ketersediaan Pemandu Saat Ini</h3><div class="relative h-64"><canvas id="chartStatuses"></canvas></div></div>
         </div>
       </div>
     </section>
   </main>
 
-  <!-- FOOTER ALA LOKALE.COFFEE -->
+  <!-- FOOTER -->
   <footer class="bg-lokaledeep text-white pt-14 pb-10 px-4 sm:px-6 lg:px-8">
     <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-12 gap-10 pb-10 border-b border-white/15">
       <div class="md:col-span-5 space-y-3">
@@ -512,15 +487,16 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       <div class="md:col-span-3 space-y-2 text-xs">
         <h4 class="font-bold uppercase tracking-wider mb-3">Hubungi Kami</h4>
         <p class="text-sky-100/80">Politeknik Negeri Medan, Padang Bulan, Kota Medan</p>
-        <p class="text-sky-200 font-mono">Kelompok 2 • Sistem Pemandu Wisata</p>
+        <p class="text-sky-200 font-medium">Layanan Pemandu Wisata Resmi Sumatera Utara</p>
       </div>
       <div class="md:col-span-4 space-y-2 text-xs">
-        <h4 class="font-bold uppercase tracking-wider mb-3">Database Terintegrasi</h4>
-        <p class="text-sky-100/80">CodeIgniter 4 + PostgreSQL 3NF (<?= $totalGuides ?> Pemandu • <?= count($destinations ?? []) ?> Wisata • <?= count($culinaries ?? []) ?> Kuliner • <?= count($hotels ?? []) ?> Hotel • <?= count($transports ?? []) ?> Transportasi)</p>
+        <h4 class="font-bold uppercase tracking-wider mb-3">Jaringan Layanan</h4>
+        <p class="text-sky-100/80"><?= $totalGuides ?> Pemandu Resmi • <?= count($destinations ?? []) ?> Destinasi Wisata • <?= count($culinaries ?? []) ?> Kuliner • <?= count($hotels ?? []) ?> Hotel Mitra • <?= count($transports ?? []) ?> Armada</p>
       </div>
     </div>
-    <div class="max-w-7xl mx-auto pt-6 text-[11px] text-sky-200/70 flex justify-between">
+    <div class="max-w-7xl mx-auto pt-6 text-[11px] text-sky-200/70 flex flex-wrap items-center justify-between gap-2">
       <span>© Copyright 2026 SumutGO Medan. All Rights Reserved.</span>
+      <a href="<?= site_url('admin') ?>" class="text-sky-200/70 hover:text-white underline-offset-2 hover:underline transition">Portal Admin &amp; API &rarr;</a>
     </div>
   </footer>
 
@@ -551,10 +527,10 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           </div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div class="bg-sand/60 p-3 rounded-2xl"><span id="modalDestCode" class="font-mono text-[10px] text-lokale font-bold block">-</span><strong id="modalDestName">-</strong></div>
-          <div class="bg-sand/60 p-3 rounded-2xl"><span id="modalCulCode" class="font-mono text-[10px] text-lokale font-bold block">-</span><strong id="modalCulName">-</strong></div>
-          <div class="bg-sand/60 p-3 rounded-2xl"><span id="modalHotelCode" class="font-mono text-[10px] text-lokale font-bold block">-</span><strong id="modalHotelName">-</strong></div>
-          <div class="bg-sand/60 p-3 rounded-2xl"><span id="modalTransCode" class="font-mono text-[10px] text-lokale font-bold block">-</span><strong id="modalTransName">-</strong></div>
+          <div class="bg-sand/60 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Destinasi Utama</span><strong id="modalDestName">-</strong></div>
+          <div class="bg-sand/60 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Kuliner Rekomendasi</span><strong id="modalCulName">-</strong></div>
+          <div class="bg-sand/60 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Hotel Mitra</span><strong id="modalHotelName">-</strong></div>
+          <div class="bg-sand/60 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Armada Transportasi</span><strong id="modalTransName">-</strong></div>
         </div>
         <form id="bookingForm" class="border-t border-slate-100 pt-4 space-y-3">
           <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -572,17 +548,11 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
     </div>
   </div>
 
-  <!-- MODAL COMPARE & SQL -->
+  <!-- MODAL COMPARE -->
   <div id="compareModal" class="fixed inset-0 z-50 hidden bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4">
     <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[88vh] overflow-y-auto p-6 space-y-4">
       <div class="flex justify-between items-center border-b pb-3"><h3 class="font-display font-bold text-base">Bandingkan Pemandu</h3><div class="flex gap-2"><button id="btnClearCompare" type="button" class="px-3 py-1 rounded-full bg-slate-100 text-xs">Kosongkan</button><button id="btnCloseCompareModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft text-lokale">&times;</button></div></div>
       <div id="compareModalBody" class="text-xs"></div>
-    </div>
-  </div>
-  <div id="sqlModal" class="fixed inset-0 z-50 hidden bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white rounded-3xl max-w-3xl w-full p-6 space-y-4">
-      <div class="flex justify-between items-center border-b pb-3"><h3 class="font-display font-bold text-base">Live SQL Query (PostgreSQL 3NF)</h3><button id="btnCloseSqlModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft text-lokale">&times;</button></div>
-      <pre id="liveSqlCode" class="bg-slate-900 text-sky-200 rounded-2xl p-4 font-mono text-[11px] overflow-x-auto"></pre>
     </div>
   </div>
 
@@ -713,9 +683,9 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                 <span class="text-[11px] font-medium text-lokale">${escapeHtml(langs || "Indonesia")}</span>
               </div>
               <div class="mt-4 pt-3 border-t border-slate-100 space-y-1 text-[11px]">
-                <div class="truncate"><span class="font-mono font-bold text-lokale">${escapeHtml(g.destId)}</span> ${escapeHtml(g.destName)}</div>
-                <div class="truncate text-muted"><span class="font-mono">${escapeHtml(g.culinaryId)}</span> ${escapeHtml(g.culinaryName)}</div>
-                <div class="truncate text-muted"><span class="font-mono">${escapeHtml(g.hotelId)}</span> ${escapeHtml(g.hotelName)} • <span class="font-mono">${escapeHtml(g.transportId)}</span></div>
+                <div class="truncate"><span class="font-semibold text-lokale">Wisata:</span> ${escapeHtml(g.destName)}</div>
+                <div class="truncate text-muted"><span class="font-semibold text-ink/70">Kuliner:</span> ${escapeHtml(g.culinaryName)}</div>
+                <div class="truncate text-muted"><span class="font-semibold text-ink/70">Mitra:</span> ${escapeHtml(g.hotelName)} • ${escapeHtml(g.transportName)}</div>
               </div>
             </div>
             <div class="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
@@ -738,8 +708,8 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
             <td class="py-3 px-3">${escapeHtml(g.specialization)}</td>
             <td class="py-3 px-3 text-amber-500 font-bold whitespace-nowrap">★ ${Number(g.rating).toFixed(1)}</td>
             <td class="py-3 px-3 text-lokale">${escapeHtml(langs || "Indonesia")}</td>
-            <td class="py-3 px-3"><span class="font-mono font-semibold text-lokale">${escapeHtml(g.destId)}</span> ${escapeHtml(g.destName)}</td>
-            <td class="py-3 px-3 whitespace-nowrap"><span class="font-mono">${escapeHtml(g.hotelId)}</span> • <span class="font-mono">${escapeHtml(g.transportId)}</span></td>
+            <td class="py-3 px-3">${escapeHtml(g.destName)}</td>
+            <td class="py-3 px-3 text-muted">${escapeHtml(g.hotelName)} • ${escapeHtml(g.transportName)}</td>
             <td class="py-3 px-3 font-mono font-bold text-lokale whitespace-nowrap">${formatIdr(g.price)}</td>
             <td class="py-3 px-3 whitespace-nowrap"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span></td>
             <td class="py-3 px-3 text-right"><button type="button" data-open-guide="${escapeHtml(g.id)}" class="px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] transition">Detail</button></td>
@@ -800,7 +770,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "lokale-tour-pemandu-medan.csv";
+      a.download = "sumutgo-pemandu-medan.csv";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
@@ -941,6 +911,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         if (k) counts[k] = (counts[k] || 0) + 1;
       });
 
+      const categoryLabel = state.ecoTab === "culinaries" ? "Kuliner Pilihan" : state.ecoTab === "hotels" ? "Hotel Mitra" : state.ecoTab === "transports" ? "Armada Transportasi" : "Destinasi Wisata";
       const masterList = MASTER_ECOSYSTEM[state.ecoTab] || [];
       const items = masterList.map(row => {
         const k = row.destination_code || row.culinary_code || row.hotel_code || row.transport_code || "";
@@ -951,10 +922,10 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       document.getElementById("ecosystemEntitiesGrid").innerHTML = items.map(x => `
         <div class="bg-lokalesoft/40 border border-lokaleborder rounded-2xl p-3.5 text-xs flex flex-col justify-between">
           <div>
-            <div class="flex justify-between font-mono"><span class="text-lokale font-bold">${escapeHtml(x.k)}</span><span class="text-muted">${x.c} Guide</span></div>
-            <div class="font-bold text-ink mt-1">${escapeHtml(x.n)}</div>
+            <div class="flex justify-between items-center gap-2"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-lokaleborder text-lokale">${categoryLabel}</span><span class="text-muted text-[11px]">${x.c} Pemandu</span></div>
+            <div class="font-bold text-ink mt-2">${escapeHtml(x.n)}</div>
           </div>
-          <button type="button" data-eco-q="${escapeHtml(x.k)}" class="mt-2.5 w-full py-1.5 rounded-full bg-white hover:bg-lokale hover:text-white text-lokale border border-lokaleborder font-semibold text-[11px] transition">Lihat di Katalog</button>
+          <button type="button" data-eco-q="${escapeHtml(x.k)}" class="mt-2.5 w-full py-1.5 rounded-full bg-white hover:bg-lokale hover:text-white text-lokale border border-lokaleborder font-semibold text-[11px] transition">Lihat Pemandu Terkait</button>
         </div>`).join("");
 
       document.querySelectorAll("[data-eco-q]").forEach(b => b.addEventListener("click", () => {
@@ -965,67 +936,6 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         renderDirectory();
         document.getElementById("direktori-pemandu").scrollIntoView({ behavior: "smooth" });
       }));
-    }
-
-    function renderAdmin() {
-      const busy = TOUR_GUIDES.filter(g => g.status !== "Tersedia");
-      const fb = document.getElementById("adminActionFeedback");
-      document.getElementById("bookingLedgerList").innerHTML = busy.length
-        ? busy.map(g => `<div class="py-2.5 flex justify-between items-center gap-2">
-            <div class="min-w-0">
-              <strong class="text-ink block truncate">${escapeHtml(g.id)} • ${escapeHtml(g.name)}</strong>
-              <div class="text-[11px] text-muted truncate">${escapeHtml(g.status)} • ${escapeHtml(g.destName)}</div>
-            </div>
-            <button type="button" data-rel="${escapeHtml(g.id)}" class="shrink-0 px-3 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white font-semibold transition">Set Tersedia</button>
-          </div>`).join("")
-        : `<p class="py-6 text-center text-muted">Seluruh ${TOUR_GUIDES.length} pemandu saat ini berstatus Tersedia.</p>`;
-
-      document.querySelectorAll("[data-rel]").forEach(b => b.addEventListener("click", async () => {
-        const id = b.dataset.rel;
-        b.disabled = true;
-        b.textContent = "Menyimpan...";
-        try {
-          const resp = await fetch(`${API_BASE_URL}/${encodeURIComponent(id)}/status`, {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ availability_status: "Tersedia", status_ketersediaan: "Tersedia" })
-          });
-          const data = await resp.json();
-          if (!resp.ok) throw new Error(data.message || "Gagal memperbarui status.");
-          const g = TOUR_GUIDES.find(x => x.id === id);
-          if (g) g.status = "Tersedia";
-          fb.className = "p-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] font-medium";
-          fb.textContent = data.message || `Status ${id} diperbarui menjadi Tersedia.`;
-          fb.classList.remove("hidden");
-          renderAdmin();
-          renderDirectory();
-        } catch (err) {
-          b.disabled = false;
-          b.textContent = "Set Tersedia";
-          fb.className = "p-2.5 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-[11px] font-medium";
-          fb.textContent = err.message || "Gagal terhubung ke server.";
-          fb.classList.remove("hidden");
-        }
-      }));
-      fetchApiTest("list");
-    }
-
-    async function fetchApiTest(mode) {
-      document.querySelectorAll(".api-test-btn").forEach(b => {
-        b.className = b.dataset.apiTest === mode
-          ? "api-test-btn px-3 py-1.5 rounded-full bg-lokale text-white font-mono text-[11px] transition"
-          : "api-test-btn px-3 py-1.5 rounded-full bg-lokalesoft text-lokale hover:bg-lokale/10 font-mono text-[11px] transition";
-      });
-      const url = mode === "stats" ? `${API_BASE_URL}/stats` : mode === "detail" ? `${API_BASE_URL}/TG-001` : API_BASE_URL;
-      const out = document.getElementById("apiSandboxOutput");
-      out.textContent = "Memuat response API...";
-      try {
-        const r = await fetch(url);
-        const d = await r.json();
-        out.textContent = JSON.stringify(d, null, 2);
-      } catch (e) {
-        out.textContent = JSON.stringify({ error: "Gagal mengambil data API", fallback: TOUR_GUIDES.slice(0, 3) }, null, 2);
-      }
     }
 
     function openGuideModal(id) {
@@ -1041,13 +951,9 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       document.getElementById("modalPrice").textContent = formatIdr(g.price) + " / hari";
       document.getElementById("modalRating").textContent = `★ ${Number(g.rating).toFixed(1)} (${g.reviews} ulasan)`;
       document.getElementById("modalPhone").textContent = g.phone ? `+${g.phone}` : "-";
-      document.getElementById("modalDestCode").textContent = g.destId || "-";
       document.getElementById("modalDestName").textContent = g.destName || "-";
-      document.getElementById("modalCulCode").textContent = g.culinaryId || "-";
       document.getElementById("modalCulName").textContent = g.culinaryName || "-";
-      document.getElementById("modalHotelCode").textContent = g.hotelId || "-";
       document.getElementById("modalHotelName").textContent = g.hotelName || "-";
-      document.getElementById("modalTransCode").textContent = g.transportId || "-";
       document.getElementById("modalTransName").textContent = g.transportName || "-";
       document.getElementById("bookTotalReadout").textContent = formatIdr(g.price * Math.max(1, Number(document.getElementById("bookDays").value || 1)));
       document.getElementById("bookingFeedback").classList.add("hidden");
@@ -1056,7 +962,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
 
     function switchTab(t) {
       state.activeTab = t;
-      ["directory", "map", "planner", "analytics", "admin"].forEach(k => document.getElementById("view-" + k).classList.toggle("hidden", k !== t));
+      ["directory", "map", "planner", "analytics"].forEach(k => document.getElementById("view-" + k).classList.toggle("hidden", k !== t));
       document.querySelectorAll(".main-tab-btn").forEach(b => {
         b.className = b.dataset.mainTab === t
           ? "main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition bg-lokale text-white shadow-sm"
@@ -1070,13 +976,11 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       if (t === "map") initOrUpdateMap();
       if (t === "planner") updatePlanner();
       if (t === "analytics") renderAnalytics();
-      if (t === "admin") renderAdmin();
     }
 
     function closeAllModals() {
       document.getElementById("guideModal").classList.add("hidden");
       document.getElementById("compareModal").classList.add("hidden");
-      document.getElementById("sqlModal").classList.add("hidden");
     }
 
     window.addEventListener("DOMContentLoaded", () => {
@@ -1150,7 +1054,6 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       ["planGuideSelect", "planDays", "planPax", "planHotelTier", "planTransportMode"].forEach(id => document.getElementById(id).addEventListener("change", updatePlanner));
       document.getElementById("btnBookFromPlanner").addEventListener("click", () => openGuideModal(document.getElementById("planGuideSelect").value));
       document.querySelectorAll(".eco-tab-btn").forEach(b => b.addEventListener("click", () => { state.ecoTab = b.dataset.ecoTab; renderEco(); }));
-      document.querySelectorAll(".api-test-btn").forEach(b => b.addEventListener("click", () => fetchApiTest(b.dataset.apiTest)));
 
       document.getElementById("btnCloseGuideModal").addEventListener("click", () => document.getElementById("guideModal").classList.add("hidden"));
       document.getElementById("bookDays").addEventListener("input", e => {
@@ -1225,13 +1128,8 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
 
       document.getElementById("btnCloseCompareModal").addEventListener("click", () => document.getElementById("compareModal").classList.add("hidden"));
       document.getElementById("btnClearCompare").addEventListener("click", () => { state.compareList = []; document.getElementById("compareModal").classList.add("hidden"); renderDirectory(); });
-      document.getElementById("btnOpenSqlModalTop").addEventListener("click", () => {
-        document.getElementById("liveSqlCode").textContent = `SELECT * FROM vw_guides_detail ORDER BY guide_id ASC;`;
-        document.getElementById("sqlModal").classList.remove("hidden");
-      });
-      document.getElementById("btnCloseSqlModal").addEventListener("click", () => document.getElementById("sqlModal").classList.add("hidden"));
 
-      ["guideModal", "compareModal", "sqlModal"].forEach(modalId => {
+      ["guideModal", "compareModal"].forEach(modalId => {
         document.getElementById(modalId).addEventListener("click", e => {
           if (e.target.id === modalId) document.getElementById(modalId).classList.add("hidden");
         });

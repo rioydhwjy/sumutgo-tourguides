@@ -4,9 +4,10 @@ use CodeIgniter\Router\RouteCollection;
 
 /** @var RouteCollection $routes */
 
-// Web Frontend Routes (Legacy / Phase 5)
+// Web Frontend Routes
 $routes->get('/', 'TourGuideController::index');
 $routes->get('tour-guides', 'TourGuideController::index');
+$routes->get('admin', 'TourGuideController::admin');
 
 // Legacy API endpoints (backward compatibility)
 $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function ($routes) {
