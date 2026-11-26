@@ -33,8 +33,8 @@ class BookingController extends BaseApiController
             $filters['tourist_id'] = $userId;
         } elseif ($role === 'guide') {
             // Find guide record for this user
-            $guideRow = $this->db->table('guides')->where('user_id', $userId)->get()->getRowArray();
-            $filters['guide_id'] = $guideRow ? (int) $guideRow['guide_id'] : -1;
+            $guideId = $model->getGuideIdByUserId($userId);
+            $filters['guide_id'] = $guideId ?? -1;
         } else {
             // Admin can filter by tourist_id or guide_id optionally
             if ($this->request->getGet('tourist_id')) {
@@ -73,6 +73,12 @@ class BookingController extends BaseApiController
             if ($role === 'wisatawan' && (int) $booking['tourist_id'] !== $userId) {
                 return $this->respondError('Akses ditolak: Anda tidak memiliki izin untuk melihat reservasi ini.', 403);
             }
+            if ($role === 'guide') {
+                $guideId = $model->getGuideIdByUserId($userId);
+                if (! $guideId || (int) $booking['guide_id'] !== $guideId) {
+                    return $this->respondError('Akses ditolak: Anda tidak memiliki izin untuk melihat reservasi pemandu lain.', 403);
+                }
+            }
 
             return $this->respondSuccess($booking, 'Detail reservasi berhasil dimuat.');
         } catch (Throwable $e) {
@@ -95,6 +101,8 @@ class BookingController extends BaseApiController
             'start_date'       => 'required|valid_date[Y-m-d]',
             'end_date'         => 'required|valid_date[Y-m-d]',
             'number_of_guests' => 'required|numeric|greater_than[0]',
+            'meeting_point'    => 'permit_empty|max_length[500]',
+            'notes'            => 'permit_empty|max_length[1000]',
         ];
 
         if (! $this->validateData($payload, $rules)) {
@@ -168,14 +176,20 @@ class BookingController extends BaseApiController
             if ($newStatus !== 'cancelled') {
                 return $this->respondError("Wisatawan hanya diizinkan untuk mengubah status menjadi 'cancelled' (membatalkan).", 403);
             }
+        } elseif ($role === 'guide') {
+            $guideId = $model->getGuideIdByUserId($userId);
+            if (! $guideId || (int) $booking['guide_id'] !== $guideId) {
+                return $this->respondError('Akses ditolak: Anda hanya dapat mengelola reservasi untuk profil pemandu Anda.', 403);
+            }
         }
 
         $expectedVersion = (int) $payload['version'];
+        $cancelReason = isset($payload['cancel_reason']) ? trim((string) $payload['cancel_reason']) : null;
         $dbRole = ($role === 'admin') ? 'role_sumutgo_admin' : 'role_sumutgo_mobile';
 
         try {
-            $updated = DbTransactionRunner::runAsRole($dbRole, $userId, function () use ($model, $id, $newStatus, $expectedVersion, $userId) {
-                return $model->updateBookingStatus($id, $newStatus, $expectedVersion, $userId);
+            $updated = DbTransactionRunner::runAsRole($dbRole, $userId, function () use ($model, $id, $newStatus, $expectedVersion, $userId, $cancelReason) {
+                return $model->updateBookingStatus($id, $newStatus, $expectedVersion, $userId, $cancelReason);
             });
 
             return $this->respondSuccess($updated, "Status reservasi {$booking['booking_code']} berhasil diperbarui menjadi {$newStatus}.");

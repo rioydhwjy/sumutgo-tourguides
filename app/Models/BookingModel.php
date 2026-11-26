@@ -66,19 +66,39 @@ class BookingModel extends Model
     }
 
     /**
+     * Find guide_id owned by a user account (role = guide)
+     */
+    public function getGuideIdByUserId(int $userId): ?int
+    {
+        $row = $this->db->table('guides')
+            ->select('guide_id')
+            ->where('user_id', $userId)
+            ->get()
+            ->getRowArray();
+
+        return $row ? (int) $row['guide_id'] : null;
+    }
+
+    /**
      * Create booking using ACID Stored Function fn_create_booking
      */
     public function createBooking(array $data): array
     {
-        $touristId = (int) ($data['tourist_id'] ?? 0);
-        $guideId   = (int) ($data['guide_id'] ?? 0);
-        $startDate = (string) ($data['start_date'] ?? '');
-        $endDate   = (string) ($data['end_date'] ?? '');
-        $guests    = (int) ($data['number_of_guests'] ?? 1);
-        $destId    = ! empty($data['destination_id']) ? (int) $data['destination_id'] : null;
-        $transId   = ! empty($data['transport_id']) ? (int) $data['transport_id'] : null;
+        $touristId    = (int) ($data['tourist_id'] ?? 0);
+        $guideId      = (int) ($data['guide_id'] ?? 0);
+        $startDate    = (string) ($data['start_date'] ?? '');
+        $endDate      = (string) ($data['end_date'] ?? '');
+        $guests       = (int) ($data['number_of_guests'] ?? 1);
+        $destId       = ! empty($data['destination_id']) ? (int) $data['destination_id'] : null;
+        $transId      = ! empty($data['transport_id']) ? (int) $data['transport_id'] : null;
+        $meetingPoint = isset($data['meeting_point']) && trim((string) $data['meeting_point']) !== ''
+            ? trim((string) $data['meeting_point'])
+            : null;
+        $notes        = isset($data['notes']) && trim((string) $data['notes']) !== ''
+            ? trim((string) $data['notes'])
+            : null;
 
-        $sql = 'SELECT * FROM fn_create_booking(?, ?, ?::DATE, ?::DATE, ?::SMALLINT, ?, ?)';
+        $sql = 'SELECT * FROM fn_create_booking(?, ?, ?::DATE, ?::DATE, ?::SMALLINT, ?, ?, ?, ?)';
         $query = $this->db->query($sql, [
             $touristId,
             $guideId,
@@ -87,6 +107,8 @@ class BookingModel extends Model
             $guests,
             $destId,
             $transId,
+            $meetingPoint,
+            $notes,
         ]);
 
         $created = $query->getRowArray();
@@ -98,10 +120,16 @@ class BookingModel extends Model
     /**
      * Update booking status with Optimistic Locking using fn_update_booking_status
      */
-    public function updateBookingStatus(int $bookingId, string $newStatus, int $expectedVersion, ?int $changedBy = null): array
-    {
-        $sql = 'SELECT * FROM fn_update_booking_status(?, ?, ?, ?)';
-        $query = $this->db->query($sql, [$bookingId, trim($newStatus), $expectedVersion, $changedBy ?? 1]);
+    public function updateBookingStatus(
+        int $bookingId,
+        string $newStatus,
+        int $expectedVersion,
+        ?int $changedBy = null,
+        ?string $cancelReason = null
+    ): array {
+        $reason = ($cancelReason !== null && trim($cancelReason) !== '') ? trim($cancelReason) : null;
+        $sql = 'SELECT * FROM fn_update_booking_status(?, ?, ?, ?, ?)';
+        $query = $this->db->query($sql, [$bookingId, trim($newStatus), $expectedVersion, $changedBy ?? 1, $reason]);
         $updated = $query->getRowArray();
 
         return $this->getBookingDetail($bookingId) ?? $updated;

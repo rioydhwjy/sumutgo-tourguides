@@ -85,7 +85,7 @@ class UserModel extends Model
     public function updateLastLogin(int $userId): void
     {
         $this->update($userId, [
-            'last_login_at' => date('Y-m-d H:i:s'),
+            'last_login_at' => gmdate('Y-m-d H:i:sP'),
         ]);
     }
 }

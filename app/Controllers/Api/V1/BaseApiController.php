@@ -5,10 +5,23 @@ namespace App\Controllers\Api\V1;
 use App\Controllers\BaseController;
 use App\Libraries\AuthContext;
 use App\Traits\ApiResponseTrait;
+use CodeIgniter\Database\BaseConnection;
+use CodeIgniter\HTTP\RequestInterface;
+use CodeIgniter\HTTP\ResponseInterface;
+use Config\Database;
+use Psr\Log\LoggerInterface;
 
 abstract class BaseApiController extends BaseController
 {
     use ApiResponseTrait;
+
+    protected BaseConnection $db;
+
+    public function initController(RequestInterface $request, ResponseInterface $response, LoggerInterface $logger): void
+    {
+        parent::initController($request, $response, $logger);
+        $this->db = Database::connect();
+    }
 
     protected function getJsonPayload(): array
     {

@@ -1,0 +1,2017 @@
+/**
+ * SumutGO Tour Guides - Main Frontend Application
+ * Mempertahankan 100% desain & 4 tab eksisting, terintegrasi penuh dengan:
+ * 1. RESTful API v1 (/api/v1/...)
+ * 2. Auth Session + Instant Blur Gate pada detail pemandu wisata
+ * 3. Alur Konfirmasi Booking Multi-Hari (Tanggal + Durasi <-> End Date -> Konfirmasi -> Bukti Resmi)
+ * 4. Riwayat & Manajemen Booking Saya + Ulasan (Review)
+ */
+(function (global) {
+  'use strict';
+
+  const cfg = global.SUMUTGO_CONFIG || {};
+  let TOUR_GUIDES = Array.isArray(cfg.initialGuides) ? cfg.initialGuides.slice() : [];
+  let MASTER_ECOSYSTEM = cfg.masterEcosystem || {
+    destinations: [],
+    culinaries: [],
+    hotels: [],
+    transports: [],
+  };
+  const DEFAULT_MAX_PRICE = Number(cfg.defaultMaxPrice || 850000);
+
+  function getTodayYmd() {
+    const now = new Date();
+    const y = now.getFullYear();
+    const m = String(now.getMonth() + 1).padStart(2, '0');
+    const d = String(now.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  function addDaysYmd(ymd, deltaDays) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
+    if (!m) return getTodayYmd();
+    const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    dt.setUTCDate(dt.getUTCDate() + Number(deltaDays || 0));
+    const yy = dt.getUTCFullYear();
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, '0');
+    const dd = String(dt.getUTCDate()).padStart(2, '0');
+    return `${yy}-${mm}-${dd}`;
+  }
+
+  function diffDaysYmd(startYmd, endYmd) {
+    const ms = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(startYmd || ''));
+    const me = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(endYmd || ''));
+    if (!ms || !me) return NaN;
+    const t1 = Date.UTC(Number(ms[1]), Number(ms[2]) - 1, Number(ms[3]));
+    const t2 = Date.UTC(Number(me[1]), Number(me[2]) - 1, Number(me[3]));
+    return Math.round((t2 - t1) / 86400000);
+  }
+
+  function formatDateId(ymd) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(ymd || ''));
+    if (!m) return String(ymd || '-');
+    const dt = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])));
+    return dt.toLocaleDateString('id-ID', {
+      weekday: 'short',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
+  }
+
+  const DEFAULT_BOOK_START = cfg.defaultBookDate || addDaysYmd(getTodayYmd(), 1);
+
+  const state = {
+    activeTab: 'directory',
+    viewMode: 'cards',
+    search: '',
+    spec: 'ALL',
+    status: 'ALL',
+    lang: 'ALL',
+    district: 'ALL',
+    sort: 'id_asc',
+    maxPrice: DEFAULT_MAX_PRICE,
+    onlyFavorites: false,
+    favorites: new Set(['TG-001', 'TG-013']),
+    compareList: ['TG-001', 'TG-013'],
+    activeGuideId: 'TG-001',
+    activeGuideDetail: null,
+    refLat: 3.5612,
+    refLng: 98.6564,
+    refLabel: 'Politeknik Negeri Medan',
+    userLat: null,
+    userLng: null,
+    selectedMapGuideId: null,
+    ecoTab: 'destinations',
+    booking: {
+      step: 'form', // 'form' | 'confirm' | 'success'
+      startDate: DEFAULT_BOOK_START,
+      days: 2,
+      endDate: addDaysYmd(DEFAULT_BOOK_START, 1),
+      guests: 2,
+      destinationId: '',
+      transportId: '',
+      meetingPoint: '',
+      notes: '',
+      confirmedReceipt: null,
+    },
+    myBookingsFilter: 'ALL',
+    myBookingsList: [],
+  };
+
+  let leafletMap = null;
+  let leafletMarkersLayer = null;
+  let guideMarkersById = {};
+  let userLocationMarker = null;
+  let chartsInitialized = false;
+
+  const formatIdr = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
+  const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (ch) => ({
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#39;',
+  }[ch]));
+
+  const getLangNames = (g) => {
+    if (Array.isArray(g?.language_names) && g.language_names.length) return g.language_names;
+    if (Array.isArray(g?.languages)) {
+      return g.languages.map((l) => (typeof l === 'string' ? l : (l?.language_name || ''))).filter(Boolean);
+    }
+    if (typeof g?.spoken_languages === 'string' && g.spoken_languages.trim()) {
+      return g.spoken_languages.split(',').map((s) => s.trim()).filter(Boolean);
+    }
+    return [];
+  };
+
+  const formatDistrict = (d) => {
+    const val = String(d || 'Kota Medan').trim();
+    return val.startsWith('Medan ') ? `Kec. ${val}` : val;
+  };
+
+  const haversineKm = (a1, o1, a2, o2) => {
+    const R = 6371;
+    const dA = (a2 - a1) * Math.PI / 180;
+    const dO = (o2 - o1) * Math.PI / 180;
+    const a = Math.sin(dA / 2) ** 2 + Math.cos(a1 * Math.PI / 180) * Math.cos(a2 * Math.PI / 180) * Math.sin(dO / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  };
+
+  const statusBadgeClass = (s) => (
+    s === 'Tersedia'
+      ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
+      : s === 'Sedang Bertugas'
+        ? 'bg-amber-50 text-amber-700 border-amber-200'
+        : 'bg-rose-50 text-rose-700 border-rose-200'
+  );
+
+  const bookingStatusBadgeClass = (s) => {
+    switch (String(s || '').toLowerCase()) {
+      case 'pending': return 'bg-amber-50 text-amber-700 border-amber-200';
+      case 'confirmed': return 'bg-sky-50 text-sky-700 border-sky-200';
+      case 'ongoing': return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+      case 'completed': return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+      case 'cancelled': return 'bg-rose-50 text-rose-700 border-rose-200';
+      default: return 'bg-slate-100 text-slate-700 border-slate-200';
+    }
+  };
+
+  function isLoggedIn() {
+    return Boolean(global.SumutGoAuth && global.SumutGoAuth.isAuthenticated());
+  }
+
+  function findGuide(idOrCode) {
+    return TOUR_GUIDES.find((x) => x.id === idOrCode || String(x.guide_id) === String(idOrCode)) || null;
+  }
+
+  function updateGuideInCache(freshGuide) {
+    if (!freshGuide || !freshGuide.id) return;
+    const idx = TOUR_GUIDES.findIndex((x) => x.id === freshGuide.id || x.guide_id === freshGuide.guide_id);
+    if (idx >= 0) {
+      TOUR_GUIDES[idx] = Object.assign({}, TOUR_GUIDES[idx], freshGuide);
+    }
+  }
+
+  function updateTopKpis() {
+    const heroPill = document.getElementById('heroAvailPill');
+    const statTotal = document.getElementById('statTotalGuides');
+    const compBadge = document.getElementById('compareCountBadge');
+    const favBadge = document.getElementById('favCountBadge');
+    const favBtn = document.getElementById('btnFilterFavorites');
+
+    if (heroPill) heroPill.textContent = `${TOUR_GUIDES.filter((g) => g.status === 'Tersedia').length} Tersedia`;
+    if (statTotal) statTotal.textContent = String(TOUR_GUIDES.length);
+    if (compBadge) compBadge.textContent = String(state.compareList.length);
+    if (favBadge) favBadge.textContent = String(state.favorites.size);
+
+    if (favBtn) {
+      favBtn.className = state.onlyFavorites
+        ? 'px-3 py-2 rounded-full bg-rose-500 text-white border border-rose-500 text-xs font-semibold flex items-center gap-1 transition shadow-sm'
+        : 'px-3 py-2 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-xs font-semibold text-ink flex items-center gap-1 transition';
+      const icon = favBtn.querySelector('span');
+      if (icon) icon.className = state.onlyFavorites ? 'text-white' : 'text-rose-500';
+    }
+  }
+
+  function updateViewModeButtons() {
+    const btnCards = document.getElementById('btnViewCards');
+    const btnTable = document.getElementById('btnViewTable');
+    if (!btnCards || !btnTable) return;
+    const activeCls = 'px-4 py-1.5 rounded-full text-xs font-semibold bg-lokale text-white transition';
+    const inactiveCls = 'px-4 py-1.5 rounded-full text-xs font-semibold text-lokale hover:text-lokaledark transition';
+    btnCards.className = state.viewMode === 'cards' ? activeCls : inactiveCls;
+    btnTable.className = state.viewMode === 'table' ? activeCls : inactiveCls;
+  }
+
+  function getFilteredGuides() {
+    const q = state.search.trim().toLowerCase();
+    return TOUR_GUIDES.filter((g) => {
+      const langs = getLangNames(g);
+      if (state.onlyFavorites && !state.favorites.has(g.id)) return false;
+      if (state.spec !== 'ALL' && g.specialization !== state.spec) return false;
+      if (state.status !== 'ALL' && g.status !== state.status) return false;
+      if (state.lang !== 'ALL' && !langs.includes(state.lang)) return false;
+      if (state.district !== 'ALL' && g.district !== state.district) return false;
+      if (g.price > state.maxPrice) return false;
+      if (q && ![
+        g.id, g.name, g.agency, g.district, g.address, g.specialization,
+        g.destId, g.destName, g.culinaryId, g.culinaryName,
+        g.hotelId, g.hotelName, g.transportId, g.transportName, langs.join(' '),
+      ].join(' ').toLowerCase().includes(q)) return false;
+      return true;
+    }).sort((a, b) => (
+      state.sort === 'rating_desc'
+        ? b.rating - a.rating
+        : state.sort === 'reviews_desc'
+          ? b.reviews - a.reviews
+          : state.sort === 'price_asc'
+            ? a.price - b.price
+            : state.sort === 'price_desc'
+              ? b.price - a.price
+              : a.id.localeCompare(b.id)
+    ));
+  }
+
+  function renderDirectory() {
+    updateTopKpis();
+    updateViewModeButtons();
+    const list = getFilteredGuides();
+    const authed = isLoggedIn();
+
+    const resultCountEl = document.getElementById('resultCount');
+    const avgRatingEl = document.getElementById('avgRatingReadout');
+    if (resultCountEl) resultCountEl.textContent = String(list.length);
+    if (avgRatingEl) {
+      avgRatingEl.textContent = (list.length ? (list.reduce((a, b) => a + b.rating, 0) / list.length).toFixed(2) : '0.00') + '★';
+    }
+
+    const grid = document.getElementById('guidesGrid');
+    const wrap = document.getElementById('guidesTableWrapper');
+    const tbody = document.getElementById('guidesTableBody');
+    const empty = document.getElementById('emptyState');
+    if (!grid || !wrap || !tbody || !empty) return;
+
+    const guestNoticeStrip = document.getElementById('directoryGuestGateNotice');
+    if (guestNoticeStrip) {
+      guestNoticeStrip.classList.toggle('hidden', authed);
+    }
+
+    if (!list.length) {
+      grid.classList.add('hidden');
+      wrap.classList.add('hidden');
+      empty.classList.remove('hidden');
+      return;
+    }
+
+    empty.classList.add('hidden');
+
+    if (state.viewMode === 'cards') {
+      grid.classList.remove('hidden');
+      wrap.classList.add('hidden');
+      grid.innerHTML = list.map((g) => {
+        const langs = getLangNames(g).join(', ');
+        const distLabel = formatDistrict(g.district);
+        const phoneMasked = g.phone ? `+${g.phone}` : '-';
+
+        return `<article class="lokale-card rounded-3xl p-5 flex flex-col justify-between">
+          <div>
+            <div class="flex items-center justify-between gap-2 mb-3">
+              <div class="flex items-center gap-1.5 min-w-0">
+                <span class="font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-lokalesoft text-lokale shrink-0">${escapeHtml(g.id)}</span>
+                <span class="text-[11px] text-muted truncate">${escapeHtml(g.specialization)}</span>
+              </div>
+              <div class="flex items-center gap-1.5 shrink-0">
+                <button type="button" data-fav-btn="${escapeHtml(g.id)}" aria-label="Favorit ${escapeHtml(g.name)}" class="w-7 h-7 rounded-full border text-xs transition ${state.favorites.has(g.id) ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500'}">♥</button>
+                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+              </div>
+            </div>
+            <h3 class="font-display font-bold text-base text-ink">${escapeHtml(g.name)}</h3>
+            <p class="text-xs text-muted mt-0.5">${escapeHtml(g.agency)} • ${escapeHtml(distLabel)}</p>
+            <div class="flex flex-wrap items-center gap-2 mt-2.5 text-xs">
+              <span class="text-amber-500 font-bold">★ ${Number(g.rating).toFixed(1)}</span>
+              <span class="text-muted">(${Number(g.reviews).toLocaleString('id-ID')})</span>
+              <span class="text-[11px] font-medium text-lokale">${escapeHtml(langs || 'Indonesia')}</span>
+            </div>
+            <div class="mt-3 pt-2.5 border-t border-slate-100 text-[11px]">
+              <div class="truncate"><span class="font-semibold text-lokale">Wisata:</span> ${escapeHtml(g.destName)}</div>
+            </div>
+
+            <!-- BLUR GATE DETAIL PEMANDU PADA KARTU -->
+            <div class="relative mt-2 rounded-2xl border ${authed ? 'border-slate-100 bg-lokalesoft/25 p-2.5' : 'border-lokaleborder bg-lokalesoft/40 p-2.5 overflow-hidden'}">
+              <div class="space-y-1 text-[11px] transition-all duration-200 ${authed ? '' : 'blur-locked'}" ${authed ? '' : 'aria-hidden="true" inert'}>
+                <div class="truncate text-ink"><span class="font-semibold text-ink/80">Kuliner:</span> ${escapeHtml(g.culinaryName || '-')}</div>
+                <div class="truncate text-muted"><span class="font-semibold text-ink/80">Mitra:</span> ${escapeHtml(g.hotelName || '-')} • ${escapeHtml(g.transportName || '-')}</div>
+                <div class="truncate text-muted"><span class="font-semibold text-ink/80">Kontak:</span> ${escapeHtml(phoneMasked)} • ${escapeHtml(g.address || '-')}</div>
+              </div>
+              ${authed ? '' : `
+                <div class="blur-gate-overlay absolute inset-0 flex flex-col items-center justify-center text-center px-2.5 py-1.5 bg-white/60 backdrop-blur-[2px]">
+                  <span class="inline-flex items-center gap-1 text-[10px] font-bold text-lokaledeep">
+                    <svg class="w-3 h-3 text-lokale" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                    Login untuk lihat detail &amp; kontak
+                  </span>
+                  <div class="mt-1 flex items-center gap-1.5">
+                    <button type="button" data-gate-auth="login" class="px-2.5 py-0.5 rounded-full bg-lokale hover:bg-lokaledark text-white text-[10px] font-bold transition shadow-sm">Masuk</button>
+                    <button type="button" data-gate-auth="register" class="px-2.5 py-0.5 rounded-full bg-white hover:bg-lokalesoft text-lokale border border-lokaleborder text-[10px] font-bold transition">Daftar</button>
+                  </div>
+                </div>
+              `}
+            </div>
+          </div>
+
+          <div class="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
+            <div><span class="text-[10px] text-muted block uppercase">Tarif/Hari</span><strong class="text-sm font-mono text-lokale">${formatIdr(g.price)}</strong></div>
+            <div class="flex items-center gap-1.5">
+              <button type="button" data-comp-btn="${escapeHtml(g.id)}" class="px-2.5 py-1.5 rounded-full text-[11px] font-semibold border transition ${state.compareList.includes(g.id) ? 'bg-lokalesoft text-lokale border-lokale' : 'bg-white text-muted border-slate-200 hover:border-lokale'}">${state.compareList.includes(g.id) ? '✓' : '+'} Banding</button>
+              <button type="button" data-open-guide="${escapeHtml(g.id)}" class="px-3 py-1.5 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale border border-lokaleborder text-[11px] font-semibold transition">Detail</button>
+              <button type="button" data-book-guide="${escapeHtml(g.id)}" class="px-3.5 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] font-semibold transition shadow-sm">Booking</button>
+            </div>
+          </div>
+        </article>`;
+      }).join('');
+    } else {
+      grid.classList.add('hidden');
+      wrap.classList.remove('hidden');
+      tbody.innerHTML = list.map((g) => {
+        const langs = getLangNames(g).join(', ');
+        return `<tr class="hover:bg-lokalesoft/40">
+          <td class="py-3 px-3 font-mono font-bold text-lokale whitespace-nowrap">${escapeHtml(g.id)}</td>
+          <td class="py-3 px-3"><div class="font-bold">${escapeHtml(g.name)}</div><div class="text-[11px] text-muted">${escapeHtml(g.agency)}</div></td>
+          <td class="py-3 px-3">${escapeHtml(g.specialization)}</td>
+          <td class="py-3 px-3 text-amber-500 font-bold whitespace-nowrap">★ ${Number(g.rating).toFixed(1)}</td>
+          <td class="py-3 px-3 text-lokale">${escapeHtml(langs || 'Indonesia')}</td>
+          <td class="py-3 px-3">${escapeHtml(g.destName)}</td>
+          <td class="py-3 px-3 text-muted">
+            ${authed
+              ? `<span>${escapeHtml(g.hotelName)} • ${escapeHtml(g.transportName)}</span>`
+              : `<div class="inline-flex items-center gap-1.5">
+                   <span class="blur-locked text-[11px]" aria-hidden="true">${escapeHtml(g.hotelName)} • ${escapeHtml(g.transportName)}</span>
+                   <button type="button" data-gate-auth="login" class="px-2 py-0.5 rounded-full bg-lokalesoft border border-lokaleborder text-lokale text-[10px] font-bold hover:bg-lokale hover:text-white transition">🔒 Masuk</button>
+                 </div>`
+            }
+          </td>
+          <td class="py-3 px-3 font-mono font-bold text-lokale whitespace-nowrap">${formatIdr(g.price)}</td>
+          <td class="py-3 px-3 whitespace-nowrap"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span></td>
+          <td class="py-3 px-3 text-right whitespace-nowrap">
+            <div class="inline-flex gap-1">
+              <button type="button" data-open-guide="${escapeHtml(g.id)}" class="px-3 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[11px] font-semibold transition">Detail</button>
+              <button type="button" data-book-guide="${escapeHtml(g.id)}" class="px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] font-semibold transition">Booking</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    document.querySelectorAll('[data-open-guide]').forEach((b) => {
+      b.addEventListener('click', () => openGuideModal(b.dataset.openGuide, 'detail'));
+    });
+    document.querySelectorAll('[data-book-guide]').forEach((b) => {
+      b.addEventListener('click', () => handleStartBooking(b.dataset.bookGuide));
+    });
+    document.querySelectorAll('[data-gate-auth]').forEach((b) => {
+      b.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const mode = b.dataset.gateAuth === 'register' ? 'register' : 'login';
+        global.SumutGoAuth.openAuthModal(
+          mode,
+          'Masuk atau daftar akun wisatawan untuk membuka detail lengkap pemandu wisata.'
+        );
+      });
+    });
+    document.querySelectorAll('[data-fav-btn]').forEach((b) => {
+      b.addEventListener('click', () => {
+        state.favorites.has(b.dataset.favBtn)
+          ? state.favorites.delete(b.dataset.favBtn)
+          : state.favorites.add(b.dataset.favBtn);
+        renderDirectory();
+      });
+    });
+    document.querySelectorAll('[data-comp-btn]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const i = state.compareList.indexOf(b.dataset.compBtn);
+        if (i >= 0) state.compareList.splice(i, 1);
+        else {
+          if (state.compareList.length >= 3) state.compareList.shift();
+          state.compareList.push(b.dataset.compBtn);
+        }
+        renderDirectory();
+      });
+    });
+  }
+
+  function resetAllFilters() {
+    state.search = '';
+    state.spec = 'ALL';
+    state.status = 'ALL';
+    state.lang = 'ALL';
+    state.district = 'ALL';
+    state.sort = 'id_asc';
+    state.maxPrice = DEFAULT_MAX_PRICE;
+    state.onlyFavorites = false;
+
+    const mapSet = {
+      filterSearch: '',
+      filterSpec: 'ALL',
+      filterStatus: 'ALL',
+      filterLang: 'ALL',
+      filterDistrict: 'ALL',
+      filterSort: 'id_asc',
+      filterMaxPrice: String(DEFAULT_MAX_PRICE),
+    };
+    Object.entries(mapSet).forEach(([id, val]) => {
+      const el = document.getElementById(id);
+      if (el) el.value = val;
+    });
+    const readout = document.getElementById('priceReadout');
+    if (readout) readout.textContent = formatIdr(DEFAULT_MAX_PRICE);
+    renderDirectory();
+  }
+
+  function exportFilteredCsv() {
+    const list = getFilteredGuides();
+    if (!list.length) return;
+    const authed = isLoggedIn();
+    const headers = ['ID', 'Nama', 'Agensi', 'Spesialisasi', 'Rating', 'Ulasan', 'Kecamatan', 'Alamat', 'Telepon', 'Tarif/Hari', 'Status', 'Bahasa', 'Destinasi', 'Kuliner', 'Hotel', 'Transportasi'];
+    const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const rows = list.map((g) => [
+      g.id, g.name, g.agency, g.specialization, g.rating, g.reviews,
+      formatDistrict(g.district),
+      authed ? g.address : '[Login untuk detail alamat]',
+      authed ? g.phone : '[Login untuk kontak]',
+      g.price, g.status,
+      getLangNames(g).join('; '),
+      `${g.destId} ${g.destName}`,
+      authed ? `${g.culinaryId} ${g.culinaryName}` : '[Login untuk detail]',
+      authed ? `${g.hotelId} ${g.hotelName}` : '[Login untuk detail]',
+      authed ? `${g.transportId} ${g.transportName}` : '[Login untuk detail]',
+    ].map(csvCell).join(','));
+    const csvContent = '\uFEFF' + [headers.map(csvCell).join(','), ...rows].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'sumutgo-pemandu-medan.csv';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // =========================================================================
+  // PETA GIS BASECAMP (LEAFLET)
+  // =========================================================================
+  function setMapLocationStatus(msg, tone = 'info') {
+    const el = document.getElementById('mapLocationStatus');
+    if (!el) return;
+    if (!msg) {
+      el.textContent = '';
+      el.className = 'hidden font-medium';
+      return;
+    }
+    const toneCls = tone === 'error' ? 'text-rose-600' : tone === 'success' ? 'text-emerald-700' : 'text-lokale';
+    el.textContent = msg;
+    el.className = `font-medium ${toneCls}`;
+  }
+
+  function buildGuidePopupHtml(g) {
+    const authed = isLoggedIn();
+    const langs = getLangNames(g).join(', ') || 'Indonesia';
+    const distText = Number.isFinite(g.d) ? `${g.d.toFixed(2)} km dari titik jemput` : formatDistrict(g.district);
+    return `<div class="space-y-2 text-xs text-ink">
+      <div class="flex items-center justify-between gap-2">
+        <span class="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-lokalesoft text-lokale">${escapeHtml(g.id)}</span>
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+      </div>
+      <div>
+        <div class="font-display font-bold text-sm text-ink leading-snug">${escapeHtml(g.name)}</div>
+        <div class="text-[11px] text-muted">${escapeHtml(g.agency)}</div>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+        <span class="text-amber-500 font-bold">★ ${Number(g.rating).toFixed(1)}</span>
+        <span class="text-muted">(${Number(g.reviews).toLocaleString('id-ID')})</span>
+        <span class="text-lokale font-semibold">• ${escapeHtml(distText)}</span>
+      </div>
+      <div class="pt-1.5 border-t border-slate-100 space-y-1 text-[11px] text-muted">
+        <div><span class="font-semibold text-ink">Spesialisasi:</span> ${escapeHtml(g.specialization)}</div>
+        <div><span class="font-semibold text-ink">Bahasa:</span> ${escapeHtml(langs)}</div>
+        <div><span class="font-semibold text-ink">Destinasi:</span> ${escapeHtml(g.destName || '-')}</div>
+        <div class="leading-snug">
+          <span class="font-semibold text-ink">Basecamp:</span>
+          ${authed
+            ? escapeHtml(g.address)
+            : `<span class="blur-locked">${escapeHtml(g.address)}</span> <span class="text-[10px] font-semibold text-lokale">(Masuk untuk lihat)</span>`}
+        </div>
+      </div>
+      <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+        <div>
+          <span class="text-[10px] text-muted block">Tarif/Hari</span>
+          <strong class="font-mono text-xs text-lokale">${formatIdr(g.price)}</strong>
+        </div>
+        <button type="button" data-map-detail="${escapeHtml(g.id)}" class="px-3.5 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] font-semibold shadow-sm transition cursor-pointer">Detail</button>
+      </div>
+    </div>`;
+  }
+
+  const LOCATE_BTN_IDLE_HTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="7" stroke-opacity="0.35"/></svg><span>Lokasi Saya</span>`;
+  const LOCATE_BTN_LOADING_HTML = `<svg class="w-3.5 h-3.5 animate-spin text-lokale" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path></svg><span>Mencari...</span>`;
+
+  function setLocateButtonLoading(isLoading) {
+    const btn = document.getElementById('btnMapMyLocation');
+    if (!btn) return;
+    btn.disabled = isLoading;
+    btn.innerHTML = isLoading ? LOCATE_BTN_LOADING_HTML : LOCATE_BTN_IDLE_HTML;
+  }
+
+  function locateUserOnMap() {
+    if (!navigator.geolocation) {
+      setMapLocationStatus('Browser Anda tidak mendukung fitur geolokasi.', 'error');
+      return;
+    }
+    setLocateButtonLoading(true);
+    setMapLocationStatus('Mencari lokasi Anda...', 'info');
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const lat = Number(pos.coords.latitude.toFixed(6));
+        const lng = Number(pos.coords.longitude.toFixed(6));
+        state.userLat = lat;
+        state.userLng = lng;
+        state.refLat = lat;
+        state.refLng = lng;
+        state.refLabel = 'Lokasi Saya';
+        state.selectedMapGuideId = null;
+
+        document.querySelectorAll('.landmark-btn').forEach((b) => {
+          b.className = 'landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition';
+        });
+
+        setLocateButtonLoading(false);
+        setMapLocationStatus('Peta difokuskan ke lokasi Anda saat ini.', 'success');
+        renderMap();
+
+        if (leafletMap) {
+          let opened = false;
+          const openUserPopup = () => {
+            if (opened) return;
+            opened = true;
+            if (userLocationMarker) userLocationMarker.openPopup();
+          };
+          leafletMap.once('moveend', openUserPopup);
+          setTimeout(openUserPopup, 700);
+          leafletMap.flyTo([lat, lng], 14, { duration: 0.65 });
+        }
+      },
+      (err) => {
+        setLocateButtonLoading(false);
+        const msg = err && err.code === 1
+          ? 'Izin akses lokasi ditolak. Aktifkan izin lokasi di browser Anda.'
+          : err && err.code === 3
+            ? 'Waktu pencarian lokasi habis. Silakan coba lagi.'
+            : 'Lokasi tidak dapat dideteksi saat ini.';
+        setMapLocationStatus(msg, 'error');
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  }
+
+  function focusGuideOnMap(guideId, opts = {}) {
+    const g = findGuide(guideId);
+    if (!g) return;
+    state.selectedMapGuideId = g.id;
+    renderMap({ preserveListScroll: true });
+
+    if (!opts.skipFly && leafletMap) {
+      const targetZoom = Math.max(leafletMap.getZoom(), 15);
+      const targetLatLng = L.latLng(g.lat, g.lng);
+      const needsMove = leafletMap.getCenter().distanceTo(targetLatLng) > 10 || leafletMap.getZoom() < targetZoom;
+      let opened = false;
+      const openSelectedPopup = () => {
+        if (opened) return;
+        opened = true;
+        if (state.selectedMapGuideId === g.id && guideMarkersById[g.id]) {
+          guideMarkersById[g.id].openPopup();
+        }
+      };
+      if (needsMove) {
+        leafletMap.once('moveend', openSelectedPopup);
+        setTimeout(openSelectedPopup, 650);
+        leafletMap.flyTo(targetLatLng, targetZoom, { duration: 0.55 });
+      } else {
+        openSelectedPopup();
+      }
+    }
+  }
+
+  function initOrUpdateMap() {
+    if (!global.L) return;
+    if (!leafletMap) {
+      leafletMap = L.map('medanLeafletMap').setView([state.refLat, state.refLng], 12);
+      L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 }).addTo(leafletMap);
+      leafletMarkersLayer = L.layerGroup().addTo(leafletMap);
+
+      const LocateControl = L.Control.extend({
+        options: { position: 'topright' },
+        onAdd: () => {
+          const container = L.DomUtil.create('div', 'leaflet-control leaflet-control-locate');
+          const btn = L.DomUtil.create('button', 'leaflet-control-locate-btn', container);
+          btn.type = 'button';
+          btn.id = 'btnMapMyLocation';
+          btn.title = 'Fokus ke Lokasi Saya';
+          btn.setAttribute('aria-label', 'Fokus ke Lokasi Saya');
+          btn.innerHTML = LOCATE_BTN_IDLE_HTML;
+          L.DomEvent.disableClickPropagation(container);
+          L.DomEvent.disableScrollPropagation(container);
+          btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            locateUserOnMap();
+          });
+          return container;
+        },
+      });
+      new LocateControl().addTo(leafletMap);
+
+      document.getElementById('medanLeafletMap')?.addEventListener('click', (e) => {
+        const detailBtn = e.target.closest('[data-map-detail]');
+        if (detailBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          openGuideModal(detailBtn.dataset.mapDetail, 'detail');
+        }
+      });
+
+      leafletMap.on('click', (e) => {
+        state.refLat = Number(e.latlng.lat.toFixed(4));
+        state.refLng = Number(e.latlng.lng.toFixed(4));
+        state.refLabel = `Titik Peta (${state.refLat}, ${state.refLng})`;
+        setMapLocationStatus('');
+        document.querySelectorAll('.landmark-btn').forEach((btn) => {
+          btn.className = 'landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition';
+        });
+        renderMap();
+      });
+    }
+    setTimeout(() => {
+      leafletMap.invalidateSize();
+      renderMap();
+    }, 150);
+  }
+
+  function renderMap(opts = {}) {
+    if (!leafletMap) return;
+    const listEl = document.getElementById('nearestGuidesList');
+    const prevScroll = opts.preserveListScroll && listEl ? listEl.scrollTop : 0;
+
+    leafletMarkersLayer.clearLayers();
+    guideMarkersById = {};
+    userLocationMarker = null;
+    const activeRefEl = document.getElementById('activeRefLabel');
+    if (activeRefEl) activeRefEl.textContent = state.refLabel;
+
+    const locBtn = document.getElementById('btnMapMyLocation');
+    if (locBtn && !locBtn.disabled) {
+      locBtn.classList.toggle('is-active', state.refLabel === 'Lokasi Saya' && state.userLat !== null);
+    }
+
+    const onlyAvail = Boolean(document.getElementById('chkMapOnlyAvailable')?.checked);
+
+    if (state.userLat !== null && state.userLng !== null) {
+      L.circleMarker([state.userLat, state.userLng], {
+        radius: 16,
+        fillColor: '#2563eb',
+        color: '#2563eb',
+        weight: 1,
+        opacity: 0.35,
+        fillOpacity: 0.16,
+        interactive: false,
+      }).addTo(leafletMarkersLayer);
+
+      userLocationMarker = L.circleMarker([state.userLat, state.userLng], {
+        radius: 8,
+        fillColor: '#2563eb',
+        color: '#ffffff',
+        weight: 3,
+        fillOpacity: 1,
+      }).bindPopup(`<strong>Lokasi Saya Saat Ini</strong><br/><span class="text-[11px] text-muted">${state.userLat}, ${state.userLng}</span>`).addTo(leafletMarkersLayer);
+    }
+
+    if (!(state.refLabel === 'Lokasi Saya' && state.userLat !== null && state.userLng !== null)) {
+      L.circleMarker([state.refLat, state.refLng], {
+        radius: 9,
+        fillColor: '#f59e0b',
+        color: '#14242b',
+        weight: 2.5,
+        fillOpacity: 1,
+      }).bindPopup(`<strong>Titik Jemput Aktif</strong><br/>${escapeHtml(state.refLabel)}`).addTo(leafletMarkersLayer);
+    }
+
+    const ranked = TOUR_GUIDES
+      .filter((g) => !onlyAvail || g.status === 'Tersedia')
+      .map((g) => ({ ...g, d: haversineKm(state.refLat, state.refLng, g.lat, g.lng) }))
+      .sort((a, b) => a.d - b.d);
+
+    ranked.forEach((g) => {
+      const isSelected = state.selectedMapGuideId === g.id;
+      if (isSelected) {
+        L.circleMarker([g.lat, g.lng], {
+          radius: 16,
+          fillColor: '#07779d',
+          color: '#07779d',
+          weight: 1.5,
+          opacity: 0.5,
+          fillOpacity: 0.18,
+          interactive: false,
+        }).addTo(leafletMarkersLayer);
+      }
+
+      const marker = L.circleMarker([g.lat, g.lng], {
+        radius: isSelected ? 10 : 7,
+        fillColor: g.status === 'Tersedia' ? '#07779d' : '#e11d48',
+        color: isSelected ? '#14242b' : '#ffffff',
+        weight: isSelected ? 3 : 2,
+        fillOpacity: isSelected ? 1 : 0.9,
+      }).bindPopup(buildGuidePopupHtml(g), { maxWidth: 290, autoPan: true }).addTo(leafletMarkersLayer);
+
+      marker.on('click', () => {
+        if (state.selectedMapGuideId !== g.id) {
+          state.selectedMapGuideId = g.id;
+          renderMap({ preserveListScroll: true });
+          const focusedMarker = guideMarkersById[g.id];
+          if (focusedMarker) focusedMarker.openPopup();
+          const cardEl = listEl?.querySelector(`[data-map-guide="${CSS.escape(g.id)}"]`);
+          if (cardEl) cardEl.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+      });
+
+      if (isSelected) marker.bringToFront();
+      guideMarkersById[g.id] = marker;
+    });
+
+    if (listEl) {
+      listEl.innerHTML = ranked.length
+        ? ranked.slice(0, 12).map((g, i) => {
+          const isSelected = state.selectedMapGuideId === g.id;
+          return `<div role="button" tabindex="0" data-map-guide="${escapeHtml(g.id)}" class="py-2.5 px-2.5 my-1 rounded-xl flex items-center justify-between gap-2.5 text-xs cursor-pointer transition border ${isSelected ? 'bg-white border-lokale shadow-sm ring-1 ring-lokale/30' : 'border-transparent hover:bg-white/80 hover:border-lokaleborder'}">
+            <div class="min-w-0 flex-1">
+              <div class="flex items-center gap-1.5">
+                <strong class="text-ink truncate">#${i + 1} ${escapeHtml(g.name)}</strong>
+              </div>
+              <div class="text-[11px] text-muted truncate mt-0.5">${escapeHtml(formatDistrict(g.district))} • ${escapeHtml(g.status)}</div>
+              <div class="text-[11px] text-lokale font-medium truncate mt-0.5">★ ${Number(g.rating).toFixed(1)} • ${formatIdr(g.price)}/hr</div>
+            </div>
+            <div class="flex flex-col items-end gap-1.5 shrink-0">
+              <span class="font-mono font-bold text-lokale text-[11px]">${g.d.toFixed(2)} km</span>
+              <button type="button" data-map-select="${escapeHtml(g.id)}" class="px-3.5 py-1.5 min-h-[30px] rounded-full bg-lokale hover:bg-lokaledark active:scale-95 text-white text-[11px] font-semibold shadow-sm transition cursor-pointer">Pilih</button>
+            </div>
+          </div>`;
+        }).join('')
+        : '<p class="text-xs text-muted py-6 text-center">Tidak ada pemandu yang sesuai filter.</p>';
+
+      if (opts.preserveListScroll) {
+        listEl.scrollTop = prevScroll;
+      }
+
+      listEl.querySelectorAll('[data-map-guide]').forEach((item) => {
+        item.addEventListener('click', () => focusGuideOnMap(item.dataset.mapGuide));
+        item.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            focusGuideOnMap(item.dataset.mapGuide);
+          }
+        });
+      });
+
+      listEl.querySelectorAll('[data-map-select]').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const id = btn.dataset.mapSelect;
+          focusGuideOnMap(id, { skipFly: true });
+          openGuideModal(id, 'detail');
+        });
+      });
+    }
+  }
+
+  // =========================================================================
+  // KALKULATOR TRIP
+  // =========================================================================
+  function updatePlanner() {
+    const selEl = document.getElementById('planGuideSelect');
+    const g = (selEl ? findGuide(selEl.value) : null) || TOUR_GUIDES[0];
+    if (!g) return;
+    const days = Math.max(1, Number(document.getElementById('planDays')?.value || 1));
+    const pax = Math.max(1, Number(document.getElementById('planPax')?.value || 1));
+    const hTier = document.getElementById('planHotelTier')?.value || 'partner';
+    const tMode = document.getElementById('planTransportMode')?.value || 'partner';
+    const gCost = g.price * days;
+    const tCost = (tMode === 'hiace' ? 1250000 : tMode === 'bus' ? 2600000 : tMode === 'self' ? 0 : 650000) * days;
+    const hCost = hTier === 'none' ? 0 : (hTier === 'luxury' ? 1450000 : hTier === 'budget' ? 420000 : 750000) * Math.ceil(pax / 2) * Math.max(1, days - 1);
+    const cCost = pax * days * 75000;
+    const total = gCost + tCost + hCost + cCost;
+
+    document.getElementById('planSummaryTitle').textContent = `Paket ${g.specialization} (${days} Hari • ${pax} Peserta)`;
+    document.getElementById('planCostPerPax').textContent = `${formatIdr(Math.round(total / pax))} / pax`;
+    document.getElementById('planGuideLabel').textContent = g.name;
+    document.getElementById('planGuideCost').textContent = formatIdr(gCost);
+    document.getElementById('planTransLabel').textContent = tMode === 'self' ? 'Kendaraan Pribadi' : g.transportName;
+    document.getElementById('planTransCost').textContent = formatIdr(tCost);
+    document.getElementById('planHotelLabel').textContent = hTier === 'none' ? 'Tanpa Menginap' : g.hotelName;
+    document.getElementById('planHotelCost').textContent = formatIdr(hCost);
+    document.getElementById('planCulLabel').textContent = g.culinaryName;
+    document.getElementById('planCulCost').textContent = formatIdr(cCost);
+    document.getElementById('planGrandTotal').textContent = formatIdr(total);
+
+    const dayTwoLabel = days > 1 ? `Hari 2–${days}:` : 'Sore – Malam:';
+    const stayNote = hTier === 'none' ? 'tanpa menginap' : `menginap di ${escapeHtml(g.hotelName)}`;
+    document.getElementById('planItineraryTimeline').innerHTML = `
+      <div class="p-3.5 rounded-2xl bg-lokalesoft/50 border border-lokaleborder"><strong class="text-lokale">Hari 1:</strong> Penjemputan di ${escapeHtml(formatDistrict(g.district))} menuju <strong>${escapeHtml(g.destName)}</strong> &amp; kuliner <strong>${escapeHtml(g.culinaryName)}</strong>.</div>
+      <div class="p-3.5 rounded-2xl bg-sand/70 border border-slate-200"><strong>${dayTwoLabel}</strong> Eksplorasi ${escapeHtml(g.specialization)} bersama ${escapeHtml(g.name)}, ${stayNote}.</div>`;
+  }
+
+  // =========================================================================
+  // EKOSISTEM & GRAFIK
+  // =========================================================================
+  function renderAnalytics() {
+    if (!chartsInitialized && global.Chart) {
+      chartsInitialized = true;
+      const sc = {};
+      const ss = {};
+      const lc = {};
+      const st = { Tersedia: 0, 'Sedang Bertugas': 0, Booked: 0 };
+      TOUR_GUIDES.forEach((g) => {
+        sc[g.specialization] = (sc[g.specialization] || 0) + 1;
+        ss[g.specialization] = (ss[g.specialization] || 0) + g.price;
+        st[g.status] = (st[g.status] || 0) + 1;
+        getLangNames(g).forEach((l) => {
+          lc[l] = (lc[l] || 0) + 1;
+        });
+      });
+      const sortedLangs = Object.entries(lc).sort((a, b) => b[1] - a[1]);
+      new Chart(document.getElementById('chartSpecializations'), {
+        type: 'bar',
+        data: {
+          labels: Object.keys(sc).map((s) => s.split('&')[0].trim()),
+          datasets: [{
+            label: 'Rata-rata (Ribu Rp)',
+            data: Object.keys(sc).map((s) => Math.round(ss[s] / sc[s] / 1000)),
+            backgroundColor: '#07779d',
+            borderRadius: 8,
+          }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+      });
+      new Chart(document.getElementById('chartLanguages'), {
+        type: 'bar',
+        data: {
+          labels: sortedLangs.map(([l]) => l),
+          datasets: [{
+            label: 'Jumlah Pemandu',
+            data: sortedLangs.map(([, c]) => c),
+            backgroundColor: '#389ec0',
+            borderRadius: 8,
+          }],
+        },
+        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+      });
+      new Chart(document.getElementById('chartStatuses'), {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(st),
+          datasets: [{ data: Object.values(st), backgroundColor: ['#07779d', '#f59e0b', '#e11d48'] }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+      });
+    }
+    renderEco();
+  }
+
+  function renderEco() {
+    document.querySelectorAll('.eco-tab-btn').forEach((b) => {
+      b.className = b.dataset.ecoTab === state.ecoTab
+        ? 'eco-tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-lokale text-white transition'
+        : 'eco-tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:text-lokaledark transition';
+    });
+
+    const counts = {};
+    TOUR_GUIDES.forEach((g) => {
+      const k = state.ecoTab === 'culinaries' ? g.culinaryId : state.ecoTab === 'hotels' ? g.hotelId : state.ecoTab === 'transports' ? g.transportId : g.destId;
+      if (k) counts[k] = (counts[k] || 0) + 1;
+    });
+
+    const categoryLabel = state.ecoTab === 'culinaries' ? 'Kuliner Pilihan' : state.ecoTab === 'hotels' ? 'Hotel Mitra' : state.ecoTab === 'transports' ? 'Armada Transportasi' : 'Destinasi Wisata';
+    const masterList = MASTER_ECOSYSTEM[state.ecoTab] || [];
+    const items = masterList.map((row) => {
+      const k = row.destination_code || row.culinary_code || row.hotel_code || row.transport_code || '';
+      const n = row.destination_name || row.culinary_name || row.hotel_name || row.transport_name || '';
+      return { k, n, c: counts[k] || 0 };
+    });
+
+    const gridEl = document.getElementById('ecosystemEntitiesGrid');
+    if (!gridEl) return;
+
+    gridEl.innerHTML = items.map((x) => `
+      <div class="bg-lokalesoft/40 border border-lokaleborder rounded-2xl p-3.5 text-xs flex flex-col justify-between">
+        <div>
+          <div class="flex justify-between items-center gap-2"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-lokaleborder text-lokale">${categoryLabel}</span><span class="text-muted text-[11px]">${x.c} Pemandu</span></div>
+          <div class="font-bold text-ink mt-2">${escapeHtml(x.n)}</div>
+        </div>
+        <button type="button" data-eco-q="${escapeHtml(x.k)}" class="mt-2.5 w-full py-1.5 rounded-full bg-white hover:bg-lokale hover:text-white text-lokale border border-lokaleborder font-semibold text-[11px] transition">Lihat Pemandu Terkait</button>
+      </div>`).join('');
+
+    document.querySelectorAll('[data-eco-q]').forEach((b) => {
+      b.addEventListener('click', () => {
+        resetAllFilters();
+        state.search = b.dataset.ecoQ;
+        const searchEl = document.getElementById('filterSearch');
+        if (searchEl) searchEl.value = state.search;
+        switchTab('directory');
+        renderDirectory();
+        document.getElementById('direktori-pemandu')?.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+  }
+
+  // =========================================================================
+  // GUIDE DETAIL MODAL + BLUR GATE + MULTI-DAY BOOKING FLOW
+  // =========================================================================
+  function populateBookingMasterSelects(guide) {
+    const destSelect = document.getElementById('bookDestinationId');
+    const transSelect = document.getElementById('bookTransportId');
+
+    if (destSelect) {
+      const dests = MASTER_ECOSYSTEM.destinations || [];
+      destSelect.innerHTML = `<option value="">Sesuai Destinasi Utama Pemandu</option>` +
+        dests.map((d) => `<option value="${escapeHtml(d.destination_id)}">${escapeHtml(d.destination_code)} — ${escapeHtml(d.destination_name)}</option>`).join('');
+      if (guide?.primary_destination?.id) {
+        destSelect.value = String(guide.primary_destination.id);
+      }
+    }
+
+    if (transSelect) {
+      const transports = MASTER_ECOSYSTEM.transports || [];
+      transSelect.innerHTML = `<option value="">Sesuai Armada Default Pemandu</option>` +
+        transports.map((t) => `<option value="${escapeHtml(t.transport_id)}">${escapeHtml(t.transport_code)} — ${escapeHtml(t.transport_name)}</option>`).join('');
+      if (guide?.default_transport?.id) {
+        transSelect.value = String(guide.default_transport.id);
+      }
+    }
+  }
+
+  function renderGuideRecentReviews(guide) {
+    const box = document.getElementById('modalRecentReviews');
+    if (!box) return;
+    const revs = Array.isArray(guide?.recent_reviews) ? guide.recent_reviews : [];
+    if (!revs.length) {
+      box.innerHTML = '<p class="text-[11px] text-muted italic">Belum ada ulasan internal terbaru untuk pemandu ini.</p>';
+      return;
+    }
+    box.innerHTML = revs.slice(0, 3).map((r) => `
+      <div class="p-2.5 rounded-xl bg-white border border-slate-100 space-y-1">
+        <div class="flex items-center justify-between gap-2">
+          <strong class="text-[11px] text-ink">${escapeHtml(r.reviewer_name || 'Wisatawan')}</strong>
+          <span class="text-amber-500 font-bold text-[11px]">★ ${Number(r.rating || 5)}/5</span>
+        </div>
+        <p class="text-[11px] text-muted leading-relaxed">${escapeHtml(r.review_text || '')}</p>
+      </div>
+    `).join('');
+  }
+
+  function applyGuideModalBlurState() {
+    const authed = isLoggedIn();
+    const protectedContent = document.getElementById('guideModalProtectedContent');
+    const blurOverlay = document.getElementById('guideModalBlurOverlay');
+    const bookingAuthGate = document.getElementById('guideBookingAuthGate');
+    const bookingFlow = document.getElementById('guideBookingFlow');
+    const guideRoleWarning = document.getElementById('guideRoleBookingNote');
+    const bookingForm = document.getElementById('bookingForm');
+
+    if (protectedContent) {
+      protectedContent.classList.toggle('blur-locked', !authed);
+      if (authed) {
+        protectedContent.removeAttribute('aria-hidden');
+        protectedContent.removeAttribute('inert');
+      } else {
+        protectedContent.setAttribute('aria-hidden', 'true');
+        protectedContent.setAttribute('inert', '');
+      }
+    }
+
+    if (blurOverlay) {
+      blurOverlay.classList.toggle('hidden', authed);
+    }
+
+    if (bookingAuthGate) {
+      bookingAuthGate.classList.toggle('hidden', authed);
+    }
+
+    if (bookingFlow) {
+      bookingFlow.classList.toggle('hidden', !authed);
+    }
+
+    if (authed) {
+      const user = global.SumutGoAuth.getUser();
+      const isGuideRole = user && String(user.role).toLowerCase() === 'guide';
+      if (guideRoleWarning) guideRoleWarning.classList.toggle('hidden', !isGuideRole);
+      if (bookingForm) bookingForm.classList.toggle('hidden', isGuideRole && state.booking.step === 'form');
+    }
+  }
+
+  function setBookingStep(step) {
+    state.booking.step = step;
+    const formPanel = document.getElementById('bookingStepForm');
+    const confirmPanel = document.getElementById('bookingStepConfirm');
+    const successPanel = document.getElementById('bookingStepSuccess');
+
+    if (formPanel) formPanel.classList.toggle('hidden', step !== 'form');
+    if (confirmPanel) confirmPanel.classList.toggle('hidden', step !== 'confirm');
+    if (successPanel) successPanel.classList.toggle('hidden', step !== 'success');
+
+    const stepMap = [
+      ['stepBadge1', step === 'form', step === 'confirm' || step === 'success'],
+      ['stepBadge2', step === 'confirm', step === 'success'],
+      ['stepBadge3', step === 'success', false],
+    ];
+    stepMap.forEach(([id, isActive, isDone]) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      el.className = isActive
+        ? 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-lokale text-white transition'
+        : isDone
+          ? 'px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 transition'
+          : 'px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-muted transition';
+    });
+  }
+
+  function syncBookingDurationFromDays(newDays, opts = {}) {
+    const days = Math.min(30, Math.max(1, parseInt(newDays, 10) || 1));
+    state.booking.days = days;
+
+    const startEl = document.getElementById('bookStartDate');
+    const endEl = document.getElementById('bookEndDate');
+    const daysEl = document.getElementById('bookDays');
+
+    if (startEl && startEl.value) {
+      state.booking.startDate = startEl.value;
+    }
+    state.booking.endDate = addDaysYmd(state.booking.startDate, days - 1);
+
+    if (daysEl && !opts.keepInput) daysEl.value = String(days);
+    if (endEl) {
+      endEl.min = state.booking.startDate;
+      endEl.value = state.booking.endDate;
+    }
+
+    updateBookingPricingAndPresets();
+  }
+
+  function syncBookingFromEndDate() {
+    const startEl = document.getElementById('bookStartDate');
+    const endEl = document.getElementById('bookEndDate');
+    const daysEl = document.getElementById('bookDays');
+    const errEl = document.getElementById('bookingFormError');
+
+    const startVal = startEl?.value || state.booking.startDate;
+    const endVal = endEl?.value || state.booking.endDate;
+    state.booking.startDate = startVal;
+    state.booking.endDate = endVal;
+
+    const diff = diffDaysYmd(startVal, endVal);
+    if (Number.isNaN(diff) || diff < 0) {
+      if (errEl) {
+        errEl.textContent = 'Tanggal selesai tur tidak boleh lebih awal dari tanggal mulai.';
+        errEl.classList.remove('hidden');
+      }
+      return false;
+    }
+
+    if (errEl) errEl.classList.add('hidden');
+    const days = Math.min(30, diff + 1);
+    state.booking.days = days;
+    if (daysEl) daysEl.value = String(days);
+    updateBookingPricingAndPresets();
+    return true;
+  }
+
+  function updateBookingPricingAndPresets() {
+    const g = state.activeGuideDetail || findGuide(state.activeGuideId);
+    if (!g) return;
+
+    const days = Math.max(1, Number(state.booking.days || 1));
+    const total = Number(g.price || 0) * days;
+
+    const totalReadout = document.getElementById('bookTotalReadout');
+    const breakdownReadout = document.getElementById('bookBreakdownReadout');
+    const dateRangeReadout = document.getElementById('bookDateRangeReadout');
+
+    if (totalReadout) totalReadout.textContent = formatIdr(total);
+    if (breakdownReadout) breakdownReadout.textContent = `${formatIdr(g.price)} × ${days} hari`;
+    if (dateRangeReadout) {
+      dateRangeReadout.textContent = days === 1
+        ? `${formatDateId(state.booking.startDate)} (1 Hari)`
+        : `${formatDateId(state.booking.startDate)} – ${formatDateId(state.booking.endDate)} (${days} Hari)`;
+    }
+
+    document.querySelectorAll('[data-duration-preset]').forEach((btn) => {
+      const preset = Number(btn.dataset.durationPreset);
+      btn.className = preset === days
+        ? 'px-2.5 py-1 rounded-full text-[11px] font-bold bg-lokale text-white transition shadow-sm'
+        : 'px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white hover:bg-lokalesoft text-lokale border border-lokaleborder transition';
+    });
+  }
+
+  function populateGuideModalData(g) {
+    state.activeGuideId = g.id;
+    state.activeGuideDetail = g;
+
+    document.getElementById('modalGuideId').textContent = `${g.id} • ${g.status}`;
+    document.getElementById('modalGuideName').textContent = g.name;
+    document.getElementById('modalAgency').textContent = g.agency;
+    document.getElementById('modalAddress').textContent = g.address || '-';
+    document.getElementById('modalCoords').textContent = (g.lat && g.lng) ? `${Number(g.lat).toFixed(4)}, ${Number(g.lng).toFixed(4)}` : '-';
+    document.getElementById('modalSpec').textContent = g.specialization;
+    document.getElementById('modalLangs').textContent = getLangNames(g).join(', ') || 'Indonesia';
+    document.getElementById('modalPrice').textContent = `${formatIdr(g.price)} / hari`;
+    document.getElementById('modalRating').textContent = `★ ${Number(g.rating).toFixed(1)} (${Number(g.reviews || 0).toLocaleString('id-ID')} ulasan)`;
+
+    const phoneEl = document.getElementById('modalPhone');
+    const waLink = document.getElementById('modalWhatsappLink');
+    const phoneDigits = String(g.phone || '').replace(/[^0-9]/g, '');
+    if (phoneEl) phoneEl.textContent = phoneDigits ? `+${phoneDigits}` : '-';
+    if (waLink) {
+      waLink.href = phoneDigits ? `https://wa.me/${phoneDigits}` : '#';
+      waLink.classList.toggle('hidden', !phoneDigits);
+    }
+
+    document.getElementById('modalDestName').textContent = g.destName || '-';
+    document.getElementById('modalCulName').textContent = g.culinaryName || '-';
+    document.getElementById('modalHotelName').textContent = g.hotelName || '-';
+    document.getElementById('modalTransName').textContent = g.transportName || '-';
+
+    renderGuideRecentReviews(g);
+    populateBookingMasterSelects(g);
+
+    const mpEl = document.getElementById('bookMeetingPoint');
+    if (mpEl) {
+      mpEl.placeholder = g.address || 'Contoh: Lobby Hotel / Bandara Kualanamu';
+    }
+
+    updateBookingPricingAndPresets();
+  }
+
+  async function openGuideModal(id, intent = 'detail', prefill = null) {
+    const g = findGuide(id);
+    if (!g) return;
+
+    const today = getTodayYmd();
+    const startDefault = (prefill && prefill.startDate) || addDaysYmd(today, 1);
+    const daysDefault = (prefill && prefill.days) ? Math.min(30, Math.max(1, Number(prefill.days))) : 2;
+    const guestsDefault = (prefill && prefill.guests) ? Math.min(45, Math.max(1, Number(prefill.guests))) : 2;
+
+    state.booking.startDate = startDefault;
+    state.booking.days = daysDefault;
+    state.booking.endDate = addDaysYmd(startDefault, daysDefault - 1);
+    state.booking.guests = guestsDefault;
+    state.booking.meetingPoint = '';
+    state.booking.notes = '';
+    state.booking.confirmedReceipt = null;
+
+    const startEl = document.getElementById('bookStartDate');
+    const endEl = document.getElementById('bookEndDate');
+    const daysEl = document.getElementById('bookDays');
+    const guestsEl = document.getElementById('bookGuests');
+    const mpEl = document.getElementById('bookMeetingPoint');
+    const notesEl = document.getElementById('bookNotes');
+
+    if (startEl) {
+      startEl.min = today;
+      startEl.value = state.booking.startDate;
+    }
+    if (endEl) {
+      endEl.min = state.booking.startDate;
+      endEl.value = state.booking.endDate;
+    }
+    if (daysEl) daysEl.value = String(state.booking.days);
+    if (guestsEl) guestsEl.value = String(state.booking.guests);
+    if (mpEl) mpEl.value = '';
+    if (notesEl) notesEl.value = '';
+
+    document.getElementById('bookingFormError')?.classList.add('hidden');
+    document.getElementById('bookingConfirmError')?.classList.add('hidden');
+
+    populateGuideModalData(g);
+    setBookingStep('form');
+    applyGuideModalBlurState();
+
+    const modal = document.getElementById('guideModal');
+    if (modal) modal.classList.remove('hidden');
+
+    if (intent === 'book') {
+      setTimeout(() => {
+        const bookingTarget = isLoggedIn()
+          ? document.getElementById('guideBookingFlow')
+          : document.getElementById('guideBookingAuthGate');
+        bookingTarget?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 120);
+    }
+
+    // Fetch fresh detail + recent_reviews dari REST API v1 (/api/v1/guides/{id})
+    try {
+      const resp = await global.SumutGoApi.guides.detail(g.id);
+      if (resp?.data && state.activeGuideId === g.id) {
+        updateGuideInCache(resp.data);
+        populateGuideModalData(resp.data);
+        applyGuideModalBlurState();
+      }
+    } catch (_) {
+      // Gunakan data cache SSR jika request background gagal
+    }
+  }
+
+  function handleStartBooking(guideId, prefill = null) {
+    const g = findGuide(guideId);
+    if (!g) return;
+
+    if (!isLoggedIn()) {
+      global.SumutGoAuth.openAuthModal(
+        'login',
+        `Masuk atau daftar akun terlebih dahulu untuk memesan pemandu ${g.name} (${g.id}). Setelah masuk, Anda akan langsung diarahkan ke formulir pemesanan.`,
+        {
+          type: 'guide-modal',
+          guideId: g.id,
+          intent: 'book',
+          prefill,
+        }
+      );
+      return;
+    }
+
+    openGuideModal(g.id, 'book', prefill);
+  }
+
+  function handleBookingStep1Submit(e) {
+    e.preventDefault();
+    const errEl = document.getElementById('bookingFormError');
+    if (errEl) errEl.classList.add('hidden');
+
+    const g = state.activeGuideDetail || findGuide(state.activeGuideId);
+    if (!g) return;
+
+    const startDate = document.getElementById('bookStartDate')?.value || '';
+    const endDate = document.getElementById('bookEndDate')?.value || '';
+    const guests = parseInt(document.getElementById('bookGuests')?.value || '1', 10);
+    const destId = document.getElementById('bookDestinationId')?.value || '';
+    const transId = document.getElementById('bookTransportId')?.value || '';
+    const meetingPoint = (document.getElementById('bookMeetingPoint')?.value || '').trim();
+    const notes = (document.getElementById('bookNotes')?.value || '').trim();
+
+    if (!startDate || !endDate) {
+      if (errEl) {
+        errEl.textContent = 'Tanggal mulai dan tanggal selesai tur wajib diisi.';
+        errEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const today = getTodayYmd();
+    if (startDate < today) {
+      if (errEl) {
+        errEl.textContent = 'Tanggal mulai tur tidak boleh lebih awal dari hari ini.';
+        errEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const diff = diffDaysYmd(startDate, endDate);
+    if (Number.isNaN(diff) || diff < 0) {
+      if (errEl) {
+        errEl.textContent = 'Tanggal selesai tur harus sama atau lebih besar dari tanggal mulai.';
+        errEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    if (!guests || guests < 1) {
+      if (errEl) {
+        errEl.textContent = 'Jumlah tamu minimal 1 orang.';
+        errEl.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const days = diff + 1;
+    state.booking.startDate = startDate;
+    state.booking.endDate = endDate;
+    state.booking.days = days;
+    state.booking.guests = guests;
+    state.booking.destinationId = destId;
+    state.booking.transportId = transId;
+    state.booking.meetingPoint = meetingPoint;
+    state.booking.notes = notes;
+
+    // Isi tampilan ringkasan Tahap Konfirmasi (Step 2)
+    const destSelect = document.getElementById('bookDestinationId');
+    const transSelect = document.getElementById('bookTransportId');
+    const destLabel = destId && destSelect ? destSelect.options[destSelect.selectedIndex]?.text : g.destName;
+    const transLabel = transId && transSelect ? transSelect.options[transSelect.selectedIndex]?.text : g.transportName;
+
+    document.getElementById('confGuideLabel').textContent = `${g.name} (${g.id})`;
+    document.getElementById('confDateRange').textContent = `${formatDateId(startDate)} s.d. ${formatDateId(endDate)}`;
+    document.getElementById('confDuration').textContent = `${days} Hari`;
+    document.getElementById('confGuests').textContent = `${guests} Orang`;
+    document.getElementById('confDestLabel').textContent = destLabel || '-';
+    document.getElementById('confTransLabel').textContent = transLabel || '-';
+    document.getElementById('confMeetingPoint').textContent = meetingPoint || `${g.address} (Default Basecamp)`;
+    document.getElementById('confNotes').textContent = notes || 'Tidak ada catatan khusus';
+    document.getElementById('confRateBreakdown').textContent = `${formatIdr(g.price)} × ${days} hari`;
+    document.getElementById('confTotalEstimate').textContent = formatIdr(g.price * days);
+
+    document.getElementById('bookingConfirmError')?.classList.add('hidden');
+    setBookingStep('confirm');
+  }
+
+  async function handleConfirmSubmitBooking() {
+    const g = state.activeGuideDetail || findGuide(state.activeGuideId);
+    if (!g) return;
+
+    const btnConfirm = document.getElementById('btnConfirmBookingSubmit');
+    const btnBack = document.getElementById('btnBackToBookingForm');
+    const errEl = document.getElementById('bookingConfirmError');
+    if (errEl) errEl.classList.add('hidden');
+
+    if (btnConfirm) {
+      btnConfirm.disabled = true;
+      btnConfirm.textContent = 'Mengirim ke Server...';
+    }
+    if (btnBack) btnBack.disabled = true;
+
+    try {
+      // Kirim payload ke POST /api/v1/bookings TANPA duration_days / total_price_idr (dihitung otomatis oleh PostgreSQL)
+      const payload = {
+        guide_id: Number(g.guide_id),
+        start_date: state.booking.startDate,
+        end_date: state.booking.endDate,
+        number_of_guests: Number(state.booking.guests),
+      };
+      if (state.booking.destinationId) {
+        payload.destination_id = Number(state.booking.destinationId);
+      }
+      if (state.booking.transportId) {
+        payload.transport_id = Number(state.booking.transportId);
+      }
+      if (state.booking.meetingPoint) {
+        payload.meeting_point = state.booking.meetingPoint;
+      }
+      if (state.booking.notes) {
+        payload.notes = state.booking.notes;
+      }
+
+      const resp = await global.SumutGoApi.bookings.create(payload);
+      const created = resp?.data || {};
+      state.booking.confirmedReceipt = created;
+
+      // Render Bukti Konfirmasi Resmi dari Backend (Step 3)
+      document.getElementById('recBookingCode').textContent = created.booking_code || '-';
+      document.getElementById('recStatusBadge').textContent = created.status || 'pending';
+      document.getElementById('recGuideName').textContent = `${created.guide_name || g.name} (${created.guide_code || g.id})`;
+      document.getElementById('recDateRange').textContent = `${formatDateId(created.start_date || state.booking.startDate)} s.d. ${formatDateId(created.end_date || state.booking.endDate)}`;
+      document.getElementById('recDurationDays').textContent = `${created.duration_days || state.booking.days} Hari`;
+      document.getElementById('recTotalPrice').textContent = formatIdr(created.total_price_idr || (g.price * state.booking.days));
+      document.getElementById('recGuests').textContent = `${created.number_of_guests || state.booking.guests} Orang`;
+      document.getElementById('recMeetingPoint').textContent = created.meeting_point || state.booking.meetingPoint || g.address;
+
+      setBookingStep('success');
+      global.SumutGoAuth.showToast(`Booking ${created.booking_code || ''} berhasil diajukan!`, 'success');
+
+      // Refresh status guide dari REST API v1
+      try {
+        const freshGuide = await global.SumutGoApi.guides.detail(g.id);
+        if (freshGuide?.data) {
+          updateGuideInCache(freshGuide.data);
+          document.getElementById('modalGuideId').textContent = `${freshGuide.data.id} • ${freshGuide.data.status}`;
+          renderDirectory();
+          if (state.activeTab === 'map') renderMap({ preserveListScroll: true });
+        }
+      } catch (_) {
+        // Ignore refresh failures
+      }
+    } catch (err) {
+      if (errEl) {
+        let extraHint = '';
+        if (err.status === 409) {
+          extraHint = ' Klik "Ubah Detail" untuk memilih tanggal lain yang tersedia.';
+        } else if (err.status === 401) {
+          extraHint = ' Silakan masuk kembali untuk melanjutkan pemesanan.';
+        }
+        errEl.textContent = (err.message || 'Gagal mengajukan reservasi.') + extraHint;
+        errEl.classList.remove('hidden');
+      }
+    } finally {
+      if (btnConfirm) {
+        btnConfirm.disabled = false;
+        btnConfirm.textContent = 'Konfirmasi & Ajukan Booking';
+      }
+      if (btnBack) btnBack.disabled = false;
+    }
+  }
+
+  // =========================================================================
+  // MODAL BOOKING SAYA (DAFTAR RESERVASI, UPDATE STATUS & REVIEW)
+  // =========================================================================
+  async function openMyBookingsModal() {
+    if (!isLoggedIn()) {
+      global.SumutGoAuth.openAuthModal('login', 'Silakan masuk untuk melihat daftar reservasi Anda.');
+      return;
+    }
+
+    const modal = document.getElementById('myBookingsModal');
+    if (modal) modal.classList.remove('hidden');
+    await loadMyBookings();
+  }
+
+  async function loadMyBookings() {
+    const listEl = document.getElementById('myBookingsList');
+    const summaryEl = document.getElementById('myBookingsCountInfo');
+    if (!listEl) return;
+
+    listEl.innerHTML = '<div class="py-10 text-center text-xs text-muted">Memuat data reservasi dari server...</div>';
+
+    try {
+      const params = { page: 1, per_page: 30 };
+      if (state.myBookingsFilter !== 'ALL') {
+        params.status = state.myBookingsFilter;
+      }
+      const resp = await global.SumutGoApi.bookings.list(params);
+      const items = Array.isArray(resp?.data) ? resp.data : [];
+      state.myBookingsList = items;
+
+      if (summaryEl) {
+        summaryEl.textContent = `${items.length} reservasi ditampilkan`;
+      }
+
+      if (!items.length) {
+        listEl.innerHTML = `<div class="py-10 text-center bg-lokalesoft/40 border border-lokaleborder rounded-2xl p-6 space-y-2">
+          <p class="text-xs font-semibold text-ink">Belum ada reservasi pada filter ini.</p>
+          <p class="text-[11px] text-muted">Pilih pemandu di direktori untuk mulai memesan tur multi-hari.</p>
+        </div>`;
+        return;
+      }
+
+      const user = global.SumutGoAuth.getUser() || {};
+      const role = String(user.role || 'wisatawan').toLowerCase();
+
+      listEl.innerHTML = items.map((b) => {
+        const status = String(b.status || '').toLowerCase();
+        const canTouristCancel = role === 'wisatawan' && (status === 'pending' || status === 'confirmed');
+        const canTouristReview = role === 'wisatawan' && status === 'completed' && !b.review_id;
+        const canOperatorManage = role === 'guide' || role === 'admin';
+
+        let actionButtons = '';
+        if (canTouristCancel) {
+          actionButtons += `<button type="button" data-cancel-booking="${b.booking_id}" data-version="${b.version}" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 text-[11px] font-semibold transition">Batalkan</button>`;
+        }
+        if (canOperatorManage) {
+          if (status === 'pending') {
+            actionButtons += `<button type="button" data-status-booking="${b.booking_id}" data-next-status="confirmed" data-version="${b.version}" class="px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] font-semibold transition">Konfirmasi</button>`;
+            actionButtons += `<button type="button" data-cancel-booking="${b.booking_id}" data-version="${b.version}" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 text-[11px] font-semibold transition">Tolak</button>`;
+          } else if (status === 'confirmed') {
+            actionButtons += `<button type="button" data-status-booking="${b.booking_id}" data-next-status="ongoing" data-version="${b.version}" class="px-3 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-semibold transition">Mulai Tur</button>`;
+            actionButtons += `<button type="button" data-cancel-booking="${b.booking_id}" data-version="${b.version}" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 text-[11px] font-semibold transition">Batalkan</button>`;
+          } else if (status === 'ongoing') {
+            actionButtons += `<button type="button" data-status-booking="${b.booking_id}" data-next-status="completed" data-version="${b.version}" class="px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition">Selesaikan Tur</button>`;
+          }
+        }
+        if (canTouristReview) {
+          actionButtons += `<button type="button" data-toggle-review="${b.booking_id}" class="px-3 py-1 rounded-full bg-amber-50 hover:bg-amber-500 text-amber-700 hover:text-white border border-amber-200 text-[11px] font-semibold transition">★ Beri Ulasan</button>`;
+        }
+
+        const reviewBlock = b.review_id
+          ? `<div class="mt-2.5 p-2.5 rounded-xl bg-amber-50/70 border border-amber-200 text-[11px]">
+               <div class="font-bold text-amber-800">Ulasan Anda: ★ ${Number(b.review_rating || 5)}/5</div>
+               <div class="text-ink/80 mt-0.5">${escapeHtml(b.review_text || '')}</div>
+             </div>`
+          : canTouristReview
+            ? `<form data-review-form="${b.booking_id}" class="hidden mt-2.5 p-3 rounded-xl bg-lokalesoft/50 border border-lokaleborder space-y-2 text-[11px]">
+                 <div class="flex items-center justify-between gap-2">
+                   <label class="font-bold text-ink">Beri Rating &amp; Ulasan Pemandu</label>
+                   <select name="rating" class="bg-white border border-lokaleborder rounded-lg px-2 py-1 font-semibold">
+                     <option value="5">★★★★★ (5)</option>
+                     <option value="4">★★★★ (4)</option>
+                     <option value="3">★★★ (3)</option>
+                     <option value="2">★★ (2)</option>
+                     <option value="1">★ (1)</option>
+                   </select>
+                 </div>
+                 <textarea name="review_text" rows="2" required minlength="5" placeholder="Ceritakan pengalaman perjalanan Anda (minimal 5 karakter)..." class="w-full bg-white border border-lokaleborder rounded-xl px-3 py-2 text-xs"></textarea>
+                 <div class="flex justify-end gap-2">
+                   <button type="submit" class="px-4 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-semibold transition">Kirim Ulasan</button>
+                 </div>
+               </form>`
+            : '';
+
+        return `<div class="bg-white border border-lokaleborder rounded-2xl p-4 space-y-2 text-xs shadow-sm">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <span class="font-mono font-bold text-lokale bg-lokalesoft px-2.5 py-0.5 rounded-full">${escapeHtml(b.booking_code)}</span>
+              <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase ${bookingStatusBadgeClass(b.status)}">${escapeHtml(b.status)}</span>
+              <span class="text-[10px] font-mono text-muted">v${escapeHtml(b.version)}</span>
+            </div>
+            <strong class="font-mono text-sm text-lokale">${formatIdr(b.total_price_idr)}</strong>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            <div>
+              <div class="font-bold text-ink">${escapeHtml(b.guide_name)} (${escapeHtml(b.guide_code)})</div>
+              <div class="text-muted">Pemesan: ${escapeHtml(b.tourist_name)}</div>
+              <div class="text-muted">Tujuan: ${escapeHtml(b.destination_name)} • ${escapeHtml(b.transport_name)}</div>
+            </div>
+            <div class="sm:text-right">
+              <div class="font-semibold text-ink">${formatDateId(b.start_date)} – ${formatDateId(b.end_date)}</div>
+              <div class="text-lokale font-bold">${escapeHtml(b.duration_days)} Hari • ${escapeHtml(b.number_of_guests)} Tamu</div>
+              <div class="text-muted truncate">Kumpul: ${escapeHtml(b.meeting_point || '-')}</div>
+            </div>
+          </div>
+          ${b.notes ? `<div class="text-[11px] text-muted bg-sand/50 rounded-xl px-2.5 py-1.5">Catatan: ${escapeHtml(b.notes)}</div>` : ''}
+          ${b.cancel_reason ? `<div class="text-[11px] text-rose-700 bg-rose-50 rounded-xl px-2.5 py-1.5">Alasan batal: ${escapeHtml(b.cancel_reason)}</div>` : ''}
+          ${reviewBlock}
+          ${actionButtons ? `<div class="pt-2 border-t border-slate-100 flex flex-wrap justify-end gap-2">${actionButtons}</div>` : ''}
+        </div>`;
+      }).join('');
+
+      bindMyBookingsActions(listEl);
+    } catch (err) {
+      listEl.innerHTML = `<div class="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">${escapeHtml(err.message || 'Gagal memuat daftar reservasi.')}</div>`;
+    }
+  }
+
+  function bindMyBookingsActions(container) {
+    container.querySelectorAll('[data-cancel-booking]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const bookingId = Number(btn.dataset.cancelBooking);
+        const version = Number(btn.dataset.version);
+        const reason = global.prompt('Masukkan alasan pembatalan (opsional):', 'Perubahan jadwal perjalanan');
+        if (reason === null) return;
+
+        btn.disabled = true;
+        try {
+          await global.SumutGoApi.bookings.updateStatus(bookingId, {
+            status: 'cancelled',
+            version,
+            cancel_reason: reason.trim() || 'Dibatalkan oleh pengguna',
+          });
+          global.SumutGoAuth.showToast('Reservasi berhasil dibatalkan.', 'info');
+          await loadMyBookings();
+        } catch (err) {
+          global.SumutGoAuth.showToast(err.message || 'Gagal membatalkan reservasi.', 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-status-booking]').forEach((btn) => {
+      btn.addEventListener('click', async () => {
+        const bookingId = Number(btn.dataset.statusBooking);
+        const nextStatus = btn.dataset.nextStatus;
+        const version = Number(btn.dataset.version);
+        btn.disabled = true;
+        try {
+          await global.SumutGoApi.bookings.updateStatus(bookingId, {
+            status: nextStatus,
+            version,
+          });
+          global.SumutGoAuth.showToast(`Status booking diperbarui menjadi ${nextStatus}.`, 'success');
+          await loadMyBookings();
+        } catch (err) {
+          global.SumutGoAuth.showToast(err.message || 'Gagal memperbarui status.', 'error');
+          btn.disabled = false;
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-toggle-review]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const form = container.querySelector(`[data-review-form="${btn.dataset.toggleReview}"]`);
+        if (form) form.classList.toggle('hidden');
+      });
+    });
+
+    container.querySelectorAll('[data-review-form]').forEach((form) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const bookingId = Number(form.dataset.reviewForm);
+        const rating = Number(form.querySelector('[name="rating"]')?.value || 5);
+        const reviewText = (form.querySelector('[name="review_text"]')?.value || '').trim();
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          await global.SumutGoApi.reviews.create({
+            booking_id: bookingId,
+            rating,
+            review_text: reviewText,
+          });
+          global.SumutGoAuth.showToast('Terima kasih! Ulasan Anda berhasil disimpan.', 'success');
+          await loadMyBookings();
+        } catch (err) {
+          global.SumutGoAuth.showToast(err.message || 'Gagal mengirim ulasan.', 'error');
+          if (submitBtn) submitBtn.disabled = false;
+        }
+      });
+    });
+  }
+
+  // =========================================================================
+  // MODAL COMPARE
+  // =========================================================================
+  function openCompareModal() {
+    const authed = isLoggedIn();
+    const items = state.compareList.map((id) => findGuide(id)).filter(Boolean);
+    const colClass = items.length === 1 ? 'md:grid-cols-1' : items.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3';
+
+    document.getElementById('compareModalBody').innerHTML = items.length
+      ? `<div class="grid grid-cols-1 ${colClass} gap-4">` + items.map((g) => `
+          <div class="bg-lokalesoft/50 border border-lokaleborder rounded-2xl p-4 space-y-1.5 flex flex-col justify-between">
+            <div class="space-y-1.5">
+              <div class="flex items-center justify-between gap-2">
+                <strong class="text-lokale font-mono">${escapeHtml(g.id)}</strong>
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+              </div>
+              <h4 class="font-bold text-base text-ink">${escapeHtml(g.name)}</h4>
+              <div class="text-muted">${escapeHtml(g.specialization)}</div>
+              <div>Rating: <strong class="text-amber-500">★ ${Number(g.rating).toFixed(1)}</strong> (${g.reviews})</div>
+              <div>Tarif: <strong class="text-lokale font-mono">${formatIdr(g.price)}</strong>/hari</div>
+              <div>Bahasa: ${escapeHtml(getLangNames(g).join(', '))}</div>
+              <div>Wisata: ${escapeHtml(g.destName)}</div>
+              <div class="relative pt-1.5 border-t border-lokaleborder/60">
+                <div class="space-y-1 ${authed ? '' : 'blur-locked'}" ${authed ? '' : 'aria-hidden="true"'}>
+                  <div>Kuliner: ${escapeHtml(g.culinaryName)}</div>
+                  <div>Hotel: ${escapeHtml(g.hotelName)}</div>
+                  <div>Armada: ${escapeHtml(g.transportName)}</div>
+                  <div>Kontak: ${escapeHtml(g.phone ? `+${g.phone}` : '-')}</div>
+                </div>
+                ${authed ? '' : '<div class="mt-1 text-[10px] font-bold text-lokale">🔒 Masuk untuk membuka rincian mitra &amp; kontak</div>'}
+              </div>
+            </div>
+            <button type="button" data-compare-detail="${escapeHtml(g.id)}" class="mt-3 w-full py-1.5 rounded-full bg-lokale text-white font-semibold text-[11px]">Lihat Detail &amp; Booking</button>
+          </div>`).join('') + `</div>`
+      : '<p class="text-center py-6 text-muted">Klik tombol + Banding pada kartu pemandu untuk membandingkan.</p>';
+
+    document.querySelectorAll('[data-compare-detail]').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.getElementById('compareModal')?.classList.add('hidden');
+        openGuideModal(b.dataset.compareDetail, 'detail');
+      });
+    });
+
+    document.getElementById('compareModal')?.classList.remove('hidden');
+  }
+
+  // =========================================================================
+  // NAVIGASI TAB & MODALS
+  // =========================================================================
+  function switchTab(t) {
+    state.activeTab = t;
+    ['directory', 'map', 'planner', 'analytics'].forEach((k) => {
+      document.getElementById('view-' + k)?.classList.toggle('hidden', k !== t);
+    });
+    document.querySelectorAll('.main-tab-btn').forEach((b) => {
+      b.className = b.dataset.mainTab === t
+        ? 'main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition bg-lokale text-white shadow-sm'
+        : 'main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition text-ink/80 hover:text-lokale';
+    });
+    document.querySelectorAll('.main-tab-mobile').forEach((b) => {
+      b.className = b.dataset.mainTab === t
+        ? 'main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokale text-white transition'
+        : 'main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokalesoft text-lokale transition';
+    });
+    if (t === 'map') initOrUpdateMap();
+    if (t === 'planner') updatePlanner();
+    if (t === 'analytics') renderAnalytics();
+  }
+
+  function closeAllModals() {
+    document.getElementById('guideModal')?.classList.add('hidden');
+    document.getElementById('compareModal')?.classList.add('hidden');
+    document.getElementById('myBookingsModal')?.classList.add('hidden');
+    global.SumutGoAuth?.closeAuthModal(true);
+  }
+
+  function onAuthStateChanged(_user, authed, meta = {}) {
+    // 1. Segera update Direktori (menghilangkan atau mengembalikan Blur Gate secara instan)
+    renderDirectory();
+
+    // 2. Update Map Popup & Compare Modal jika sedang aktif
+    if (state.activeTab === 'map') {
+      renderMap({ preserveListScroll: true });
+    }
+    const compareModal = document.getElementById('compareModal');
+    if (compareModal && !compareModal.classList.contains('hidden')) {
+      openCompareModal();
+    }
+
+    // 3. Jika Modal Detail Pemandu sedang terbuka, langsung hilangkan/terapkan blur!
+    const guideModal = document.getElementById('guideModal');
+    if (guideModal && !guideModal.classList.contains('hidden')) {
+      applyGuideModalBlurState();
+    }
+
+    // 4. Jika logout, tutup modal khusus user terautentikasi
+    if (!authed) {
+      document.getElementById('myBookingsModal')?.classList.add('hidden');
+    }
+
+    // 5. Jalankan pending action setelah login/register (misal user tadi klik tombol Booking saat guest)
+    const pending = meta && meta.pendingAction;
+    if (authed && pending && pending.type === 'guide-modal' && pending.guideId) {
+      openGuideModal(pending.guideId, pending.intent || 'book', pending.prefill || null);
+    }
+  }
+
+  async function syncCatalogFromApiV1() {
+    try {
+      const [guidesResp, masterResp] = await Promise.all([
+        global.SumutGoApi.guides.list({ page: 1, per_page: 150 }),
+        global.SumutGoApi.master.all(),
+      ]);
+      if (Array.isArray(guidesResp?.data) && guidesResp.data.length) {
+        TOUR_GUIDES = guidesResp.data;
+        populateSelectOptionsFromGuides();
+        renderDirectory();
+        if (state.activeTab === 'map') renderMap({ preserveListScroll: true });
+      }
+      if (masterResp?.data && typeof masterResp.data === 'object') {
+        MASTER_ECOSYSTEM = masterResp.data;
+      }
+    } catch (_) {
+      // Tetap gunakan data SSR bila sinkronisasi background gagal
+    }
+  }
+
+  function populateSelectOptionsFromGuides() {
+    const dists = Array.from(new Set(TOUR_GUIDES.map((g) => g.district))).sort();
+    const filterDistrictEl = document.getElementById('filterDistrict');
+    if (filterDistrictEl) {
+      const prev = filterDistrictEl.value;
+      filterDistrictEl.innerHTML = `<option value="ALL">Semua Kecamatan (${dists.length})</option>` +
+        dists.map((d) => `<option value="${escapeHtml(d)}">${escapeHtml(formatDistrict(d))}</option>`).join('');
+      if (prev && Array.from(filterDistrictEl.options).some((o) => o.value === prev)) {
+        filterDistrictEl.value = prev;
+      }
+    }
+
+    const planSelEl = document.getElementById('planGuideSelect');
+    if (planSelEl) {
+      const prev = planSelEl.value;
+      planSelEl.innerHTML = TOUR_GUIDES.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.id)} — ${escapeHtml(g.name)} (${formatIdr(g.price)})</option>`).join('');
+      if (prev && Array.from(planSelEl.options).some((o) => o.value === prev)) {
+        planSelEl.value = prev;
+      }
+    }
+  }
+
+  function bindEvents() {
+    document.getElementById('brandHomeLink')?.addEventListener('click', () => switchTab('directory'));
+    document.querySelectorAll('[data-main-tab]').forEach((b) => {
+      b.addEventListener('click', () => switchTab(b.dataset.mainTab));
+    });
+    document.getElementById('btnHeroSwitchMap')?.addEventListener('click', () => switchTab('map'));
+    document.getElementById('btnHeroSwitchPlanner')?.addEventListener('click', () => switchTab('planner'));
+    document.getElementById('btnPartnershipOpenEco')?.addEventListener('click', () => switchTab('analytics'));
+    document.getElementById('btnViewCards')?.addEventListener('click', () => {
+      state.viewMode = 'cards';
+      renderDirectory();
+    });
+    document.getElementById('btnViewTable')?.addEventListener('click', () => {
+      state.viewMode = 'table';
+      renderDirectory();
+    });
+    document.getElementById('btnExportCsvFiltered')?.addEventListener('click', exportFilteredCsv);
+
+    const filterBindings = [
+      ['filterSearch', 'search', 'input'],
+      ['filterSpec', 'spec', 'change'],
+      ['filterStatus', 'status', 'change'],
+      ['filterLang', 'lang', 'change'],
+      ['filterDistrict', 'district', 'change'],
+      ['filterSort', 'sort', 'change'],
+    ];
+    filterBindings.forEach(([elId, key, ev]) => {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      el.addEventListener(ev, (e) => {
+        state[key] = e.target.value;
+        renderDirectory();
+      });
+      if (ev === 'change') {
+        el.addEventListener('input', (e) => {
+          state[key] = e.target.value;
+          renderDirectory();
+        });
+      }
+    });
+
+    document.getElementById('filterMaxPrice')?.addEventListener('input', (e) => {
+      state.maxPrice = Number(e.target.value);
+      const readout = document.getElementById('priceReadout');
+      if (readout) readout.textContent = formatIdr(state.maxPrice);
+      renderDirectory();
+    });
+
+    document.querySelectorAll('.quick-dest-card').forEach((c) => {
+      c.addEventListener('click', () => {
+        resetAllFilters();
+        state.search = c.dataset.quickDest;
+        const searchEl = document.getElementById('filterSearch');
+        if (searchEl) searchEl.value = state.search;
+        renderDirectory();
+        document.getElementById('direktori-pemandu')?.scrollIntoView({ behavior: 'smooth' });
+      });
+    });
+
+    document.getElementById('btnResetFilters')?.addEventListener('click', resetAllFilters);
+    document.getElementById('btnEmptyReset')?.addEventListener('click', resetAllFilters);
+    document.getElementById('btnFilterFavorites')?.addEventListener('click', () => {
+      state.onlyFavorites = !state.onlyFavorites;
+      switchTab('directory');
+      renderDirectory();
+    });
+
+    document.querySelectorAll('.landmark-btn').forEach((b) => {
+      b.addEventListener('click', () => {
+        document.querySelectorAll('.landmark-btn').forEach((btn) => {
+          btn.className = btn === b
+            ? 'landmark-btn px-3.5 py-2 rounded-full bg-lokale text-white font-semibold text-xs transition'
+            : 'landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition';
+        });
+        const p = b.dataset.landmark.split(',');
+        state.refLat = parseFloat(p[0]);
+        state.refLng = parseFloat(p[1]);
+        state.refLabel = p.slice(2).join(',');
+        state.selectedMapGuideId = null;
+        setMapLocationStatus('');
+        if (leafletMap) leafletMap.setView([state.refLat, state.refLng], 12);
+        renderMap();
+      });
+    });
+
+    document.getElementById('chkMapOnlyAvailable')?.addEventListener('change', () => renderMap());
+    ['planGuideSelect', 'planDays', 'planPax', 'planHotelTier', 'planTransportMode'].forEach((id) => {
+      document.getElementById(id)?.addEventListener('change', updatePlanner);
+    });
+
+    document.getElementById('btnBookFromPlanner')?.addEventListener('click', () => {
+      const guideId = document.getElementById('planGuideSelect')?.value;
+      const days = Math.max(1, Number(document.getElementById('planDays')?.value || 2));
+      const guests = Math.max(1, Number(document.getElementById('planPax')?.value || 2));
+      handleStartBooking(guideId, { days, guests });
+    });
+
+    document.querySelectorAll('.eco-tab-btn').forEach((b) => {
+      b.addEventListener('click', () => {
+        state.ecoTab = b.dataset.ecoTab;
+        renderEco();
+      });
+    });
+
+    // Guide Modal & Gate buttons
+    document.getElementById('btnCloseGuideModal')?.addEventListener('click', () => {
+      document.getElementById('guideModal')?.classList.add('hidden');
+    });
+
+    document.getElementById('btnDirectoryGuestLogin')?.addEventListener('click', () => {
+      global.SumutGoAuth.openAuthModal('login', 'Masuk untuk membuka seluruh detail kontak, basecamp, mitra wisata, dan fitur pemesanan.');
+    });
+    document.getElementById('btnDirectoryGuestRegister')?.addEventListener('click', () => {
+      global.SumutGoAuth.openAuthModal('register', 'Daftar akun wisatawan gratis untuk melihat detail lengkap semua pemandu SumutGO.');
+    });
+
+    const openAuthForActiveGuide = (mode, intent) => {
+      const g = state.activeGuideDetail || findGuide(state.activeGuideId);
+      global.SumutGoAuth.openAuthModal(
+        mode,
+        g ? `Masuk atau daftar untuk membuka detail lengkap & memesan ${g.name} (${g.id}).` : 'Masuk atau daftar untuk melanjutkan.',
+        g ? { type: 'guide-modal', guideId: g.id, intent } : null
+      );
+    };
+
+    document.getElementById('btnModalGateLogin')?.addEventListener('click', () => openAuthForActiveGuide('login', 'detail'));
+    document.getElementById('btnModalGateRegister')?.addEventListener('click', () => openAuthForActiveGuide('register', 'detail'));
+    document.getElementById('btnBookingGateLogin')?.addEventListener('click', () => openAuthForActiveGuide('login', 'book'));
+    document.getElementById('btnBookingGateRegister')?.addEventListener('click', () => openAuthForActiveGuide('register', 'book'));
+
+    // Multi-Day Booking Two-Way Date & Duration Sync
+    document.getElementById('bookStartDate')?.addEventListener('change', (e) => {
+      state.booking.startDate = e.target.value || getTodayYmd();
+      syncBookingDurationFromDays(state.booking.days);
+    });
+    document.getElementById('bookEndDate')?.addEventListener('change', syncBookingFromEndDate);
+    document.getElementById('bookDays')?.addEventListener('input', (e) => {
+      const val = parseInt(e.target.value, 10);
+      if (!Number.isNaN(val) && val >= 1) {
+        syncBookingDurationFromDays(val, { keepInput: true });
+      }
+    });
+    document.getElementById('bookDays')?.addEventListener('change', (e) => {
+      syncBookingDurationFromDays(e.target.value);
+    });
+    document.getElementById('btnDaysMinus')?.addEventListener('click', () => {
+      syncBookingDurationFromDays(Math.max(1, state.booking.days - 1));
+    });
+    document.getElementById('btnDaysPlus')?.addEventListener('click', () => {
+      syncBookingDurationFromDays(Math.min(30, state.booking.days + 1));
+    });
+    document.querySelectorAll('[data-duration-preset]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        syncBookingDurationFromDays(Number(btn.dataset.durationPreset));
+      });
+    });
+
+    document.getElementById('bookingForm')?.addEventListener('submit', handleBookingStep1Submit);
+    document.getElementById('btnBackToBookingForm')?.addEventListener('click', () => setBookingStep('form'));
+    document.getElementById('btnConfirmBookingSubmit')?.addEventListener('click', handleConfirmSubmitBooking);
+    document.getElementById('btnReceiptViewBookings')?.addEventListener('click', () => {
+      document.getElementById('guideModal')?.classList.add('hidden');
+      openMyBookingsModal();
+    });
+    document.getElementById('btnReceiptBookAgain')?.addEventListener('click', () => {
+      setBookingStep('form');
+    });
+    document.getElementById('btnGuideRoleViewBookings')?.addEventListener('click', () => {
+      document.getElementById('guideModal')?.classList.add('hidden');
+      openMyBookingsModal();
+    });
+
+    // Compare Modal
+    document.getElementById('btnToggleCompareModal')?.addEventListener('click', openCompareModal);
+    document.getElementById('btnCloseCompareModal')?.addEventListener('click', () => {
+      document.getElementById('compareModal')?.classList.add('hidden');
+    });
+    document.getElementById('btnClearCompare')?.addEventListener('click', () => {
+      state.compareList = [];
+      document.getElementById('compareModal')?.classList.add('hidden');
+      renderDirectory();
+    });
+
+    // My Bookings Modal
+    document.getElementById('btnOpenMyBookings')?.addEventListener('click', openMyBookingsModal);
+    document.getElementById('btnCloseMyBookingsModal')?.addEventListener('click', () => {
+      document.getElementById('myBookingsModal')?.classList.add('hidden');
+    });
+    document.getElementById('btnRefreshMyBookings')?.addEventListener('click', loadMyBookings);
+    document.querySelectorAll('[data-booking-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        state.myBookingsFilter = btn.dataset.bookingFilter || 'ALL';
+        document.querySelectorAll('[data-booking-filter]').forEach((b) => {
+          b.className = b.dataset.bookingFilter === state.myBookingsFilter
+            ? 'px-3 py-1 rounded-full text-[11px] font-bold bg-lokale text-white transition'
+            : 'px-3 py-1 rounded-full text-[11px] font-semibold bg-lokalesoft text-lokale hover:bg-lokale/10 transition';
+        });
+        loadMyBookings();
+      });
+    });
+
+    // Backdrop & ESC handling
+    ['guideModal', 'compareModal', 'myBookingsModal'].forEach((modalId) => {
+      document.getElementById(modalId)?.addEventListener('click', (e) => {
+        if (e.target && (e.target.id === modalId || e.target.dataset?.modalBackdrop === modalId)) {
+          document.getElementById(modalId)?.classList.add('hidden');
+        }
+      });
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') closeAllModals();
+    });
+  }
+
+  async function bootstrap() {
+    populateSelectOptionsFromGuides();
+    bindEvents();
+
+    if (global.SumutGoAuth) {
+      global.SumutGoAuth.subscribe(onAuthStateChanged);
+      try {
+        await global.SumutGoAuth.init();
+      } catch (err) {
+        console.error('[SumutGoApp] Auth init error:', err);
+      }
+    }
+
+    renderDirectory();
+
+    if (!TOUR_GUIDES.length || !(MASTER_ECOSYSTEM.destinations && MASTER_ECOSYSTEM.destinations.length)) {
+      syncCatalogFromApiV1();
+    }
+  }
+
+  if (document.readyState === 'loading') {
+    global.addEventListener('DOMContentLoaded', bootstrap);
+  } else {
+    bootstrap();
+  }
+
+  global.SumutGoApp = {
+    openGuideModal,
+    handleStartBooking,
+    openMyBookingsModal,
+    switchTab,
+    renderDirectory,
+  };
+})(window);

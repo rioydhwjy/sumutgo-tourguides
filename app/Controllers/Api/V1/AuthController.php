@@ -20,9 +20,13 @@ class AuthController extends BaseApiController
 
         $rules = [
             'full_name' => 'required|min_length[2]|max_length[100]',
-            'email'     => 'required|valid_email|max_length[150]',
+            'email'     => 'required|valid_email|max_length[100]',
             'password'  => 'required|min_length[8]',
         ];
+
+        if (array_key_exists('password_confirmation', $payload)) {
+            $rules['password_confirmation'] = 'required|matches[password]';
+        }
 
         if (! $this->validateData($payload, $rules)) {
             return $this->respondError('Validasi formulir pendaftaran gagal.', 422, $this->validator->getErrors());
@@ -115,6 +119,10 @@ class AuthController extends BaseApiController
 
         if (! $user) {
             return $this->respondError('Pengguna tidak ditemukan.', 404);
+        }
+
+        if (! (bool) ($user['is_active'] ?? true)) {
+            return $this->respondError('Akun pengguna sedang dinonaktifkan.', 403);
         }
 
         unset($user['password_hash']);

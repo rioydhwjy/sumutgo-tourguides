@@ -22,7 +22,7 @@ class AuditLogModel extends Model
 
         $builder = $this->db->table('audit_logs al')
             ->select('al.*, u.full_name as user_name, u.email as user_email, u.role as user_role')
-            ->join('users u', 'u.user_id = al.user_id', 'left');
+            ->join('users u', 'u.user_id = al.changed_by', 'left');
 
         if (! empty($filters['entity_type'])) {
             $builder->where('al.entity_type', trim($filters['entity_type']));
@@ -44,11 +44,11 @@ class AuditLogModel extends Model
 
         // Decode JSON fields for clean consumption
         $items = array_map(static function (array $r): array {
-            if (isset($r['old_values']) && is_string($r['old_values'])) {
-                $r['old_values'] = json_decode($r['old_values'], true);
+            if (isset($r['old_data']) && is_string($r['old_data'])) {
+                $r['old_data'] = json_decode($r['old_data'], true);
             }
-            if (isset($r['new_values']) && is_string($r['new_values'])) {
-                $r['new_values'] = json_decode($r['new_values'], true);
+            if (isset($r['new_data']) && is_string($r['new_data'])) {
+                $r['new_data'] = json_decode($r['new_data'], true);
             }
             return $r;
         }, $rows);

@@ -120,10 +120,16 @@ class TourGuideModel extends Model
                 break;
         }
 
-        $totalBuilder = clone $builder;
-        $total = $totalBuilder->countAllResults(false);
-
-        $rows = $builder->limit($perPage, $offset)->get()->getResultArray();
+        if ($page === 1 && $perPage >= 150) {
+            $rows = $builder->limit($perPage, $offset)->get()->getResultArray();
+            $total = count($rows) < $perPage
+                ? count($rows)
+                : (clone $builder)->countAllResults(false);
+        } else {
+            $totalBuilder = clone $builder;
+            $total = $totalBuilder->countAllResults(false);
+            $rows = $builder->limit($perPage, $offset)->get()->getResultArray();
+        }
 
         $items = array_map(function (array $r): array {
             return $this->formatGuideRow($r);
@@ -326,12 +332,16 @@ class TourGuideModel extends Model
      */
     public function getSummaryStats(): array
     {
-        $total = $this->db->table('guides')->countAllResults();
-        $available = $this->db->table('guides')->where('availability_status', 'Tersedia')->countAllResults();
-        $booked = $this->db->table('guides')->where('availability_status', 'Booked')->countAllResults();
-        $onDuty = $this->db->table('guides')->where('availability_status', 'Sedang Bertugas')->countAllResults();
-
-        $avgRow = $this->db->query('SELECT ROUND(AVG(gmaps_rating), 2) AS avg_rating, ROUND(AVG(daily_rate_idr), 0) AS avg_rate FROM guides')->getRowArray();
+        $summaryRow = $this->db->query(
+            "SELECT
+                COUNT(*)::int AS total_guides,
+                COUNT(*) FILTER (WHERE availability_status = 'Tersedia')::int AS available_guides,
+                COUNT(*) FILTER (WHERE availability_status = 'Booked')::int AS booked_guides,
+                COUNT(*) FILTER (WHERE availability_status = 'Sedang Bertugas')::int AS on_duty_guides,
+                ROUND(AVG(gmaps_rating), 2) AS avg_rating,
+                ROUND(AVG(daily_rate_idr), 0) AS avg_rate
+             FROM guides"
+        )->getRowArray();
 
         $specs = $this->db->table('guides g')
             ->select('ts.specialization_name, COUNT(g.guide_id) as count')
@@ -343,12 +353,12 @@ class TourGuideModel extends Model
         $totalBookings = $this->db->table('bookings')->countAllResults();
 
         return [
-            'total_guides'        => $total,
-            'available_guides'    => $available,
-            'booked_guides'       => $booked,
-            'on_duty_guides'      => $onDuty,
-            'avg_rating'          => (float) ($avgRow['avg_rating'] ?? 4.74),
-            'avg_rate_idr'        => (int) ($avgRow['avg_rate'] ?? 515500),
+            'total_guides'        => (int) ($summaryRow['total_guides'] ?? 0),
+            'available_guides'    => (int) ($summaryRow['available_guides'] ?? 0),
+            'booked_guides'       => (int) ($summaryRow['booked_guides'] ?? 0),
+            'on_duty_guides'      => (int) ($summaryRow['on_duty_guides'] ?? 0),
+            'avg_rating'          => (float) ($summaryRow['avg_rating'] ?? 4.74),
+            'avg_rate_idr'        => (int) ($summaryRow['avg_rate'] ?? 515500),
             'total_bookings'      => $totalBookings,
             'by_specialization'   => $specs,
         ];

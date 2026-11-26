@@ -71,13 +71,21 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
     .leaflet-control-locate-btn.is-active { background: #07779d; color: #ffffff; border-color: #07779d; }
     .leaflet-popup-content-wrapper { border-radius: 16px !important; box-shadow: 0 12px 28px -8px rgba(20, 36, 43, 0.25) !important; padding: 2px !important; }
     .leaflet-popup-content { margin: 12px 14px !important; min-width: 230px; max-width: 280px; font-family: 'Inter', sans-serif; }
+    .blur-locked {
+      filter: blur(5.5px);
+      -webkit-filter: blur(5.5px);
+      user-select: none;
+      -webkit-user-select: none;
+      pointer-events: none;
+      transition: filter 0.25s ease;
+    }
   </style>
 </head>
-<body class="bg-white text-ink antialiased selection:bg-lokale selection:text-white">
+<body class="bg-white text-ink antialiased selection:bg-lokale selection:text-white auth-guest">
 
   <!-- STICKY CLEAN NAVBAR (LOKALE.COFFEE STYLE) -->
   <header class="sticky top-0 z-40 nav-blur border-b border-slate-200/80">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-4">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between gap-3">
       <a href="#beranda" id="brandHomeLink" class="flex items-center gap-2.5 group shrink-0">
         <div class="w-10 h-10 rounded-full bg-lokale text-white flex items-center justify-center shadow-md shadow-lokale/20 group-hover:bg-lokaledark transition">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
@@ -98,15 +106,41 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         <button type="button" data-main-tab="analytics" class="main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition text-ink/80 hover:text-lokale">Destinasi &amp; Mitra</button>
       </nav>
 
-      <div class="flex items-center gap-2">
-        <button id="btnToggleCompareModal" type="button" class="px-3.5 py-2 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-xs font-semibold border border-lokaleborder transition flex items-center gap-1.5">
-          <span>Bandingkan</span>
+      <div class="flex items-center gap-2 shrink-0">
+        <button id="btnToggleCompareModal" type="button" class="px-3 py-2 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-xs font-semibold border border-lokaleborder transition flex items-center gap-1.5">
+          <span class="hidden sm:inline">Bandingkan</span>
+          <span class="sm:hidden">Banding</span>
           <span id="compareCountBadge" class="px-1.5 py-0.5 rounded-full bg-lokale text-white text-[10px] font-bold">0</span>
         </button>
         <button id="btnFilterFavorites" type="button" class="px-3 py-2 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-xs font-semibold text-ink flex items-center gap-1 transition">
           <span class="text-rose-500">♥</span>
           <span id="favCountBadge" class="font-mono text-[11px]">0</span>
         </button>
+
+        <!-- AUTH: GUEST STATE -->
+        <div id="navAuthGuest" class="flex items-center gap-1.5 pl-1 border-l border-slate-200">
+          <button id="btnNavLogin" type="button" class="px-3.5 py-2 rounded-full bg-white hover:bg-lokalesoft text-lokale border border-lokaleborder text-xs font-semibold transition">Masuk</button>
+          <button id="btnNavRegister" type="button" class="px-3.5 py-2 rounded-full bg-lokale hover:bg-lokaledark text-white text-xs font-semibold shadow-sm shadow-lokale/20 transition">Daftar</button>
+        </div>
+
+        <!-- AUTH: LOGGED IN STATE -->
+        <div id="navAuthUser" class="hidden">
+          <div class="flex items-center gap-1.5 pl-1 border-l border-slate-200">
+            <button id="btnOpenMyBookings" type="button" class="px-3 py-2 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale border border-lokaleborder text-xs font-semibold transition flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              <span id="btnOpenMyBookingsText" class="hidden md:inline">Booking Saya</span>
+            </button>
+            <a id="navAdminQuickLink" href="<?= site_url('admin') ?>" class="hidden px-3 py-2 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 text-xs font-semibold transition">Portal Admin</a>
+            <div class="flex items-center gap-2 bg-white border border-lokaleborder rounded-full pl-1.5 pr-1.5 py-1 shadow-sm">
+              <span id="navUserAvatar" class="w-6 h-6 rounded-full bg-lokale text-white text-[10px] font-bold flex items-center justify-center shrink-0">U</span>
+              <div class="hidden sm:flex items-center gap-1.5">
+                <span id="navUserName" class="text-xs font-semibold text-ink max-w-[110px] truncate">-</span>
+                <span id="navUserRoleBadge" class="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wide border bg-lokalesoft text-lokale border-lokaleborder">wisatawan</span>
+              </div>
+              <button id="btnNavLogout" type="button" class="px-2.5 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white text-[11px] font-semibold transition">Keluar</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -325,6 +359,19 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
             </div>
           </div>
 
+          <div id="directoryGuestGateNotice" class="bg-sand/70 border border-lokaleborder rounded-2xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 text-xs">
+            <div class="flex items-center gap-2.5 text-ink">
+              <span class="w-7 h-7 rounded-full bg-lokale/10 text-lokale flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              </span>
+              <span><strong>Mode Tamu (Guest):</strong> Informasi kontak, basecamp, serta detail mitra hotel &amp; armada disamarkan. Masuk atau daftar untuk membuka seluruh detail dan melakukan pemesanan.</span>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button id="btnDirectoryGuestLogin" type="button" class="px-4 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-semibold transition">Masuk</button>
+              <button id="btnDirectoryGuestRegister" type="button" class="px-4 py-1.5 rounded-full bg-white hover:bg-lokalesoft text-lokale border border-lokaleborder font-semibold transition">Daftar Gratis</button>
+            </div>
+          </div>
+
           <div id="guidesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
 
           <div id="guidesTableWrapper" class="hidden bg-white border border-lokaleborder rounded-3xl overflow-hidden shadow-sm">
@@ -519,21 +566,23 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
     </div>
   </footer>
 
-  <!-- MODAL DETAIL & BOOKING -->
-  <div id="guideModal" class="fixed inset-0 z-50 hidden bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4">
-    <div class="bg-white border border-lokaleborder rounded-3xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
-      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white">
+  <!-- MODAL DETAIL & BOOKING MULTI-HARI -->
+  <div id="guideModal" class="hidden fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div data-modal-backdrop="guideModal" class="min-h-full flex items-center justify-center">
+    <div class="bg-white border border-lokaleborder rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 z-20 bg-white">
         <div>
           <span id="modalGuideId" class="text-[11px] font-mono font-bold text-lokale uppercase">TG-001</span>
           <h3 id="modalGuideName" class="text-lg font-display font-extrabold text-ink">-</h3>
         </div>
-        <button id="btnCloseGuideModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft text-lokale text-lg">&times;</button>
+        <button id="btnCloseGuideModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-lg transition">&times;</button>
       </div>
-      <div class="p-6 space-y-4 text-xs">
+
+      <div class="p-6 space-y-5 text-xs">
+        <!-- Ringkasan Publik Pemandu (Selalu Tajam) -->
         <div class="flex flex-wrap justify-between gap-3 bg-lokalesoft/60 p-4 rounded-2xl border border-lokaleborder">
           <div>
             <div id="modalAgency" class="font-bold text-sm text-ink">-</div>
-            <div id="modalAddress" class="text-muted text-[11px] mt-1">-</div>
             <div class="flex flex-wrap items-center gap-2 mt-2">
               <span id="modalSpec" class="px-2.5 py-0.5 rounded-full bg-white border border-lokaleborder text-lokale font-semibold text-[11px]">-</span>
               <span id="modalLangs" class="text-[11px] font-medium text-ink">-</span>
@@ -542,883 +591,407 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           <div class="text-right">
             <div id="modalPrice" class="font-mono font-bold text-base text-lokale">-</div>
             <div id="modalRating" class="text-amber-500 font-bold mt-0.5">-</div>
-            <div id="modalPhone" class="text-[11px] font-mono text-muted mt-1">-</div>
           </div>
         </div>
-        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div class="bg-sand/60 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Destinasi Utama</span><strong id="modalDestName">-</strong></div>
-          <div class="bg-sand/60 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Kuliner Rekomendasi</span><strong id="modalCulName">-</strong></div>
-          <div class="bg-sand/60 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Hotel Mitra</span><strong id="modalHotelName">-</strong></div>
-          <div class="bg-sand/60 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Armada Transportasi</span><strong id="modalTransName">-</strong></div>
+
+        <!-- BLUR GATE: DETAIL LANJUTAN PEMANDU (Kontak, Basecamp, Mitra Ekosistem, Ulasan) -->
+        <div id="guideModalProtectedDetails" class="relative rounded-3xl border border-lokaleborder bg-sand/30 p-4 overflow-hidden min-h-[235px]">
+          <div id="guideModalProtectedContent" class="space-y-4 transition-all duration-200">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 bg-white p-3.5 rounded-2xl border border-lokaleborder/80">
+              <div>
+                <span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Alamat Basecamp</span>
+                <div id="modalAddress" class="text-ink font-medium mt-0.5 leading-relaxed">-</div>
+                <div class="text-[10px] font-mono text-muted mt-1">Koordinat: <span id="modalCoords">-</span></div>
+              </div>
+              <div class="sm:text-right flex flex-col sm:items-end justify-between gap-2">
+                <div>
+                  <span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Kontak Pemandu</span>
+                  <div id="modalPhone" class="font-mono font-bold text-sm text-ink mt-0.5">-</div>
+                </div>
+                <a id="modalWhatsappLink" href="#" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 text-[11px] font-semibold transition">
+                  <span>Chat WhatsApp</span>
+                </a>
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div class="bg-white border border-lokaleborder/70 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Destinasi Utama</span><strong id="modalDestName" class="text-ink block mt-0.5">-</strong></div>
+              <div class="bg-white border border-lokaleborder/70 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Kuliner Rekomendasi</span><strong id="modalCulName" class="text-ink block mt-0.5">-</strong></div>
+              <div class="bg-white border border-lokaleborder/70 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Hotel Mitra</span><strong id="modalHotelName" class="text-ink block mt-0.5">-</strong></div>
+              <div class="bg-white border border-lokaleborder/70 p-3 rounded-2xl"><span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Armada Transportasi</span><strong id="modalTransName" class="text-ink block mt-0.5">-</strong></div>
+            </div>
+
+            <div class="space-y-2">
+              <span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Ulasan Wisatawan Terbaru</span>
+              <div id="modalRecentReviews" class="space-y-2"></div>
+            </div>
+          </div>
+
+          <!-- OVERLAY BLUR GATE SAAT GUEST -->
+          <div id="guideModalBlurOverlay" class="hidden absolute inset-0 z-10">
+            <div class="w-full h-full flex items-center justify-center p-4 bg-white/55 backdrop-blur-[3px]">
+            <div class="bg-white/95 border border-lokaleborder rounded-2xl p-5 shadow-xl max-w-sm w-full text-center space-y-3">
+              <div class="w-11 h-11 mx-auto rounded-full bg-lokalesoft border border-lokaleborder text-lokale flex items-center justify-center">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+              </div>
+              <div>
+                <h4 class="font-display font-extrabold text-sm text-ink">Detail Lengkap Pemandu Terkunci</h4>
+                <p class="text-[11px] text-muted mt-1 leading-relaxed">Masuk atau daftar akun SumutGO untuk melihat kontak WhatsApp, alamat basecamp, mitra hotel &amp; armada, serta ulasan tamu.</p>
+              </div>
+              <div class="flex items-center justify-center gap-2 pt-1">
+                <button id="btnModalGateLogin" type="button" class="px-5 py-2 rounded-full bg-lokale hover:bg-lokaledark text-white text-xs font-bold transition shadow-sm">Masuk</button>
+                <button id="btnModalGateRegister" type="button" class="px-5 py-2 rounded-full bg-lokalesoft hover:bg-lokale/15 text-lokale border border-lokaleborder text-xs font-bold transition">Daftar Gratis</button>
+              </div>
+            </div>
+            </div>
+          </div>
         </div>
-        <form id="bookingForm" class="border-t border-slate-100 pt-4 space-y-3">
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            <div><label for="bookTravelerName" class="block text-[10px] font-semibold text-muted mb-1">Nama Pemesan</label><input id="bookTravelerName" type="text" required value="Rio Yudha Wijaya" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2" /></div>
-            <div><label for="bookDate" class="block text-[10px] font-semibold text-muted mb-1">Tanggal Tur</label><input id="bookDate" type="date" required value="<?= esc($defaultBookDate) ?>" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2" /></div>
-            <div><label for="bookDays" class="block text-[10px] font-semibold text-muted mb-1">Durasi (Hari)</label><input id="bookDays" type="number" min="1" max="14" value="2" required class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2" /></div>
+
+        <!-- BOOKING GATE UNTUK GUEST -->
+        <div id="guideBookingAuthGate" class="border-t border-slate-100 pt-4">
+          <div class="bg-lokalesoft/60 border border-lokaleborder rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div class="font-display font-bold text-sm text-ink">Ingin memesan pemandu wisata ini?</div>
+              <p class="text-[11px] text-muted mt-0.5">Silakan masuk atau daftar akun wisatawan untuk memilih tanggal tur multi-hari dan menerima kode booking resmi.</p>
+            </div>
+            <div class="flex items-center gap-2 shrink-0">
+              <button id="btnBookingGateLogin" type="button" class="px-4 py-2 rounded-full bg-lokale hover:bg-lokaledark text-white text-xs font-bold transition">Masuk untuk Booking</button>
+              <button id="btnBookingGateRegister" type="button" class="px-4 py-2 rounded-full bg-white hover:bg-lokalesoft text-lokale border border-lokaleborder text-xs font-bold transition">Daftar</button>
+            </div>
           </div>
-          <div class="flex items-center justify-between pt-2">
-            <div>Total: <strong id="bookTotalReadout" class="font-mono text-lokale text-sm">-</strong></div>
-            <button type="submit" id="btnSubmitBooking" class="px-6 py-2 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold transition">Konfirmasi Booking</button>
+        </div>
+
+        <!-- ALUR KONFIRMASI BOOKING MULTI-HARI (LOGGED IN) -->
+        <div id="guideBookingFlow" class="hidden border-t border-slate-100 pt-4 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <h4 class="font-display font-extrabold text-sm text-ink">Pemesanan Tur Multi-Hari</h4>
+            <div class="flex items-center gap-1.5">
+              <span id="stepBadge1" class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-lokale text-white transition">1. Tanggal &amp; Hari</span>
+              <span id="stepBadge2" class="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-muted transition">2. Konfirmasi</span>
+              <span id="stepBadge3" class="px-2.5 py-1 rounded-full text-[10px] font-semibold bg-slate-100 text-muted transition">3. Bukti Resmi</span>
+            </div>
           </div>
-          <div id="bookingFeedback" class="hidden p-3 rounded-2xl bg-lokalesoft border border-lokale text-lokaledeep font-medium"></div>
-        </form>
+
+          <div id="guideRoleBookingNote" class="hidden p-4 rounded-2xl bg-amber-50 border border-amber-200 text-amber-900 space-y-2">
+            <div class="font-bold">Anda masuk sebagai akun Pemandu (Guide).</div>
+            <p class="text-[11px] leading-relaxed">Pembuatan booking baru di sistem hanya tersedia untuk akun <strong>wisatawan</strong> atau <strong>admin</strong>. Anda dapat melihat dan mengelola permintaan tur yang masuk melalui menu Jadwal Tur.</p>
+            <button id="btnGuideRoleViewBookings" type="button" class="px-4 py-1.5 rounded-full bg-amber-600 hover:bg-amber-700 text-white text-[11px] font-bold transition">Buka Jadwal Tur Saya</button>
+          </div>
+
+          <!-- STEP 1: PILIH TANGGAL & BERAPA HARI -->
+          <div id="bookingStepForm">
+            <form id="bookingForm" class="space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label for="bookStartDate" class="block text-[11px] font-semibold text-muted mb-1">Tanggal Mulai Tur</label>
+                  <input id="bookStartDate" type="date" required value="<?= esc($defaultBookDate) ?>" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3 py-2 text-xs text-ink focus:outline-none" />
+                </div>
+                <div>
+                  <label for="bookEndDate" class="block text-[11px] font-semibold text-muted mb-1">Tanggal Selesai Tur</label>
+                  <input id="bookEndDate" type="date" required value="<?= esc(date('Y-m-d', strtotime($defaultBookDate . ' +1 day'))) ?>" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3 py-2 text-xs text-ink focus:outline-none" />
+                </div>
+                <div>
+                  <label for="bookGuests" class="block text-[11px] font-semibold text-muted mb-1">Jumlah Tamu (Orang)</label>
+                  <input id="bookGuests" type="number" min="1" max="45" value="2" required class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3 py-2 text-xs font-mono text-ink focus:outline-none" />
+                </div>
+              </div>
+
+              <div class="bg-lokalesoft/40 border border-lokaleborder rounded-2xl p-3.5 space-y-2.5">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <label for="bookDays" class="block text-[11px] font-bold text-ink">Durasi Pemesanan (Jumlah Hari)</label>
+                    <span class="text-[10px] text-muted">Otomatis tersinkronisasi dua arah dengan Tanggal Selesai</span>
+                  </div>
+                  <div class="inline-flex items-center gap-1.5 bg-white border border-lokaleborder rounded-full p-1">
+                    <button id="btnDaysMinus" type="button" aria-label="Kurangi hari" class="w-7 h-7 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white font-bold text-sm transition">&minus;</button>
+                    <input id="bookDays" type="number" min="1" max="30" value="2" required class="w-12 text-center font-mono font-bold text-sm text-ink focus:outline-none bg-transparent" />
+                    <span class="text-[11px] font-semibold text-muted pr-1">Hari</span>
+                    <button id="btnDaysPlus" type="button" aria-label="Tambah hari" class="w-7 h-7 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white font-bold text-sm transition">+</button>
+                  </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  <span class="text-[10px] font-semibold text-muted mr-1">Preset cepat:</span>
+                  <button type="button" data-duration-preset="1" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-lokale border border-lokaleborder">1 Hari</button>
+                  <button type="button" data-duration-preset="2" class="px-2.5 py-1 rounded-full text-[11px] font-bold bg-lokale text-white">2 Hari</button>
+                  <button type="button" data-duration-preset="3" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-lokale border border-lokaleborder">3 Hari</button>
+                  <button type="button" data-duration-preset="5" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-lokale border border-lokaleborder">5 Hari</button>
+                  <button type="button" data-duration-preset="7" class="px-2.5 py-1 rounded-full text-[11px] font-semibold bg-white text-lokale border border-lokaleborder">7 Hari</button>
+                </div>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="bookDestinationId" class="block text-[11px] font-semibold text-muted mb-1">Destinasi Tujuan (Opsional)</label>
+                  <select id="bookDestinationId" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink focus:outline-none"></select>
+                </div>
+                <div>
+                  <label for="bookTransportId" class="block text-[11px] font-semibold text-muted mb-1">Armada Transportasi (Opsional)</label>
+                  <select id="bookTransportId" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink focus:outline-none"></select>
+                </div>
+                <div>
+                  <label for="bookMeetingPoint" class="block text-[11px] font-semibold text-muted mb-1">Titik Kumpul / Penjemputan</label>
+                  <input id="bookMeetingPoint" type="text" maxlength="500" placeholder="Contoh: Lobby Hotel / Bandara Kualanamu" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink focus:outline-none" />
+                </div>
+                <div>
+                  <label for="bookNotes" class="block text-[11px] font-semibold text-muted mb-1">Catatan Tambahan (Opsional)</label>
+                  <input id="bookNotes" type="text" maxlength="1000" placeholder="Misal: Jemput pukul 08.00 WIB, fokus kuliner halal" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink focus:outline-none" />
+                </div>
+              </div>
+
+              <div id="bookingFormError" class="hidden p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold"></div>
+
+              <div class="bg-lokale text-white rounded-2xl p-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <div id="bookDateRangeReadout" class="text-[11px] text-sky-100 font-medium">-</div>
+                  <div class="text-xs font-semibold mt-0.5">Estimasi Biaya (<span id="bookBreakdownReadout" class="font-mono">-</span>)</div>
+                  <strong id="bookTotalReadout" class="font-display font-extrabold text-xl">Rp 0</strong>
+                </div>
+                <button type="submit" id="btnProceedConfirm" class="px-6 py-2.5 rounded-full bg-white hover:bg-sand text-lokale font-bold text-xs shadow-md transition">
+                  Lanjut ke Konfirmasi &rarr;
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- STEP 2: RINGKASAN KONFIRMASI BOOKING -->
+          <div id="bookingStepConfirm" class="hidden space-y-4">
+            <div class="bg-sand/70 border border-lokaleborder rounded-2xl p-4 space-y-3">
+              <div class="flex items-center justify-between border-b border-lokaleborder/70 pb-2.5">
+                <div>
+                  <span class="text-[10px] font-bold uppercase tracking-wider text-lokale">Tahap Konfirmasi Pemesanan</span>
+                  <h5 class="font-display font-bold text-sm text-ink">Periksa Kembali Detail Booking Anda</h5>
+                </div>
+                <span id="confDuration" class="px-3 py-1 rounded-full bg-lokale text-white font-mono font-bold text-xs">2 Hari</span>
+              </div>
+
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+                <div class="bg-white rounded-xl p-2.5 border border-lokaleborder/60"><span class="text-muted block">Pemandu Wisata</span><strong id="confGuideLabel" class="text-ink">-</strong></div>
+                <div class="bg-white rounded-xl p-2.5 border border-lokaleborder/60"><span class="text-muted block">Rentang Tanggal Tur</span><strong id="confDateRange" class="text-ink">-</strong></div>
+                <div class="bg-white rounded-xl p-2.5 border border-lokaleborder/60"><span class="text-muted block">Jumlah Tamu</span><strong id="confGuests" class="text-ink">-</strong></div>
+                <div class="bg-white rounded-xl p-2.5 border border-lokaleborder/60"><span class="text-muted block">Destinasi Tujuan</span><strong id="confDestLabel" class="text-ink">-</strong></div>
+                <div class="bg-white rounded-xl p-2.5 border border-lokaleborder/60"><span class="text-muted block">Armada Transportasi</span><strong id="confTransLabel" class="text-ink">-</strong></div>
+                <div class="bg-white rounded-xl p-2.5 border border-lokaleborder/60"><span class="text-muted block">Titik Kumpul</span><strong id="confMeetingPoint" class="text-ink">-</strong></div>
+              </div>
+
+              <div class="bg-white rounded-xl p-2.5 border border-lokaleborder/60 text-[11px]">
+                <span class="text-muted block">Catatan Tambahan</span>
+                <span id="confNotes" class="text-ink font-medium">-</span>
+              </div>
+
+              <div class="bg-lokalesoft rounded-xl p-3 border border-lokaleborder flex items-center justify-between">
+                <div>
+                  <span class="text-[11px] text-muted block">Perhitungan Tarif (<span id="confRateBreakdown" class="font-mono">-</span>)</span>
+                  <strong class="text-xs text-lokaledeep">Total Estimasi Biaya</strong>
+                </div>
+                <strong id="confTotalEstimate" class="font-display font-extrabold text-lg text-lokale">Rp 0</strong>
+              </div>
+            </div>
+
+            <div id="bookingConfirmError" class="hidden p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold"></div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <button id="btnBackToBookingForm" type="button" class="px-5 py-2.5 rounded-full bg-slate-100 hover:bg-slate-200 text-ink font-semibold text-xs transition">&larr; Ubah Detail</button>
+              <button id="btnConfirmBookingSubmit" type="button" class="px-6 py-2.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold text-xs shadow-md shadow-lokale/20 transition">Konfirmasi &amp; Ajukan Booking</button>
+            </div>
+          </div>
+
+          <!-- STEP 3: BUKTI KONFIRMASI RESMI DARI BACKEND -->
+          <div id="bookingStepSuccess" class="hidden space-y-4">
+            <div class="bg-emerald-50/80 border border-emerald-200 rounded-2xl p-5 space-y-3">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                  <span class="w-9 h-9 rounded-full bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  </span>
+                  <div>
+                    <h5 class="font-display font-extrabold text-sm text-emerald-950">Permintaan Booking Berhasil Diajukan!</h5>
+                    <p class="text-[11px] text-emerald-800">Tercatat aman di database PostgreSQL SumutGO dengan proteksi anti double-booking.</p>
+                  </div>
+                </div>
+                <span id="recStatusBadge" class="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 border border-amber-300 font-bold uppercase text-[10px]">pending</span>
+              </div>
+
+              <div class="bg-white rounded-xl p-3.5 border border-emerald-200 grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-[11px]">
+                <div><span class="text-muted block">Kode Booking Resmi</span><strong id="recBookingCode" class="font-mono text-sm text-lokale">-</strong></div>
+                <div><span class="text-muted block">Total Biaya Resmi</span><strong id="recTotalPrice" class="font-mono text-sm text-emerald-700">-</strong></div>
+                <div><span class="text-muted block">Pemandu Wisata</span><strong id="recGuideName" class="text-ink">-</strong></div>
+                <div><span class="text-muted block">Durasi Resmi</span><strong id="recDurationDays" class="text-lokale">-</strong></div>
+                <div><span class="text-muted block">Rentang Tanggal</span><strong id="recDateRange" class="text-ink">-</strong></div>
+                <div><span class="text-muted block">Tamu &amp; Titik Kumpul</span><strong id="recGuests" class="text-ink">-</strong> • <span id="recMeetingPoint" class="text-muted">-</span></div>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <button id="btnReceiptBookAgain" type="button" class="px-4 py-2 rounded-full bg-slate-100 hover:bg-slate-200 text-ink font-semibold text-xs transition">Buat Jadwal Lain</button>
+              <button id="btnReceiptViewBookings" type="button" class="px-5 py-2.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold text-xs shadow-sm transition">Lihat Daftar Booking Saya &rarr;</button>
+            </div>
+          </div>
+        </div>
       </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- MODAL AUTENTIKASI: MASUK & DAFTAR -->
+  <div id="authModal" class="hidden fixed inset-0 z-[60] bg-ink/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div data-modal-backdrop="authModal" class="min-h-full flex items-center justify-center">
+    <div class="bg-white border border-lokaleborder rounded-3xl max-w-md w-full max-h-[92vh] overflow-y-auto shadow-2xl">
+      <div class="flex items-start justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-[0.16em] text-lokale">Akun SumutGO</span>
+          <h3 id="authModalTitle" class="text-lg font-display font-extrabold text-ink mt-0.5">Masuk ke SumutGO</h3>
+          <p id="authModalSubtitle" class="text-[11px] text-muted mt-0.5">Gunakan email dan password akun SumutGO Anda.</p>
+        </div>
+        <button id="btnCloseAuthModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-lg transition">&times;</button>
+      </div>
+
+      <div class="p-6 space-y-4 text-xs">
+        <div id="authContextNotice" class="hidden p-3 rounded-2xl bg-lokalesoft border border-lokaleborder text-lokaledeep text-[11px] font-medium leading-relaxed"></div>
+
+        <div class="grid grid-cols-2 gap-1 bg-lokalesoft p-1 rounded-full border border-lokaleborder">
+          <button id="btnAuthTabLogin" type="button" class="py-2 rounded-full text-xs font-bold transition bg-lokale text-white shadow-sm">Masuk</button>
+          <button id="btnAuthTabRegister" type="button" class="py-2 rounded-full text-xs font-semibold transition text-lokale hover:text-lokaledark">Daftar Akun</button>
+        </div>
+
+        <!-- PANEL LOGIN -->
+        <div id="authLoginPanel" class="space-y-4">
+          <form id="loginForm" class="space-y-3" novalidate>
+            <div>
+              <label for="loginEmail" class="block text-[11px] font-semibold text-muted mb-1">Email</label>
+              <input id="loginEmail" type="email" autocomplete="email" required placeholder="nama@email.com" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2.5 text-xs text-ink focus:outline-none" />
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label for="loginPassword" class="text-[11px] font-semibold text-muted">Password</label>
+                <button type="button" data-toggle-pw="loginPassword" class="text-[10px] font-semibold text-lokale hover:underline">Lihat</button>
+              </div>
+              <input id="loginPassword" type="password" autocomplete="current-password" required placeholder="Masukkan password Anda" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2.5 text-xs text-ink focus:outline-none" />
+            </div>
+            <div id="loginFeedback" class="hidden"></div>
+            <button id="btnLoginSubmit" type="submit" class="w-full py-2.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold text-xs shadow-md shadow-lokale/20 transition">Masuk Sekarang</button>
+          </form>
+
+          <div class="bg-sand/70 border border-lokaleborder rounded-2xl p-3.5 space-y-2">
+            <div class="flex items-center justify-between gap-2">
+              <span class="text-[10px] font-bold uppercase tracking-wider text-lokale">Isi Cepat Akun Uji (Email &amp; Password)</span>
+              <span class="text-[10px] text-muted">Role diambil dari DB</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-1.5">
+              <button type="button" data-demo-account="wisatawan" title="Isi kredensial budi@wisatawan.id" class="px-2 py-1.5 rounded-xl bg-white hover:bg-lokalesoft border border-lokaleborder text-[10px] font-mono font-semibold text-ink truncate transition">budi@wisatawan.id</button>
+              <button type="button" data-demo-account="guide" title="Isi kredensial horas@guide.id" class="px-2 py-1.5 rounded-xl bg-white hover:bg-lokalesoft border border-lokaleborder text-[10px] font-mono font-semibold text-ink truncate transition">horas@guide.id</button>
+              <button type="button" data-demo-account="admin" title="Isi kredensial admin@sumutgo.id" class="px-2 py-1.5 rounded-xl bg-white hover:bg-lokalesoft border border-lokaleborder text-[10px] font-mono font-semibold text-ink truncate transition">admin@sumutgo.id</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- PANEL REGISTER -->
+        <div id="authRegisterPanel" class="hidden space-y-4">
+          <form id="registerForm" class="space-y-3" novalidate>
+            <div>
+              <label for="regFullName" class="block text-[11px] font-semibold text-muted mb-1">Nama Lengkap</label>
+              <input id="regFullName" type="text" autocomplete="name" required minlength="2" maxlength="100" placeholder="Contoh: Nadia Putri Nasution" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2.5 text-xs text-ink focus:outline-none" />
+            </div>
+            <div>
+              <label for="regEmail" class="block text-[11px] font-semibold text-muted mb-1">Alamat Email</label>
+              <input id="regEmail" type="email" autocomplete="email" required maxlength="100" placeholder="nadia@email.com" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2.5 text-xs text-ink focus:outline-none" />
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label for="regPassword" class="text-[11px] font-semibold text-muted">Password (min. 8 karakter)</label>
+                <button type="button" data-toggle-pw="regPassword" class="text-[10px] font-semibold text-lokale hover:underline">Lihat</button>
+              </div>
+              <input id="regPassword" type="password" autocomplete="new-password" required minlength="8" placeholder="Minimal 8 karakter" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2.5 text-xs text-ink focus:outline-none" />
+            </div>
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label for="regPasswordConfirm" class="text-[11px] font-semibold text-muted">Konfirmasi Password</label>
+                <button type="button" data-toggle-pw="regPasswordConfirm" class="text-[10px] font-semibold text-lokale hover:underline">Lihat</button>
+              </div>
+              <input id="regPasswordConfirm" type="password" autocomplete="new-password" required minlength="8" placeholder="Ulangi password Anda" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2.5 text-xs text-ink focus:outline-none" />
+            </div>
+            <div id="registerFeedback" class="hidden"></div>
+            <button id="btnRegisterSubmit" type="submit" class="w-full py-2.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold text-xs shadow-md shadow-lokale/20 transition">Daftar &amp; Masuk</button>
+          </form>
+        </div>
+      </div>
+    </div>
+    </div>
+  </div>
+
+  <!-- MODAL BOOKING SAYA -->
+  <div id="myBookingsModal" class="hidden fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div data-modal-backdrop="myBookingsModal" class="min-h-full flex items-center justify-center">
+    <div class="bg-white border border-lokaleborder rounded-3xl max-w-3xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 z-10 bg-white">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-lokale">Riwayat &amp; Status Reservasi</span>
+          <h3 class="text-lg font-display font-extrabold text-ink">Daftar Booking Anda</h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnRefreshMyBookings" type="button" class="px-3 py-1.5 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-xs font-semibold transition">Muat Ulang</button>
+          <button id="btnCloseMyBookingsModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-lg transition">&times;</button>
+        </div>
+      </div>
+      <div class="p-6 space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap gap-1.5">
+            <button type="button" data-booking-filter="ALL" class="px-3 py-1 rounded-full text-[11px] font-bold bg-lokale text-white transition">Semua</button>
+            <button type="button" data-booking-filter="pending" class="px-3 py-1 rounded-full text-[11px] font-semibold bg-lokalesoft text-lokale hover:bg-lokale/10 transition">Pending</button>
+            <button type="button" data-booking-filter="confirmed" class="px-3 py-1 rounded-full text-[11px] font-semibold bg-lokalesoft text-lokale hover:bg-lokale/10 transition">Confirmed</button>
+            <button type="button" data-booking-filter="ongoing" class="px-3 py-1 rounded-full text-[11px] font-semibold bg-lokalesoft text-lokale hover:bg-lokale/10 transition">Ongoing</button>
+            <button type="button" data-booking-filter="completed" class="px-3 py-1 rounded-full text-[11px] font-semibold bg-lokalesoft text-lokale hover:bg-lokale/10 transition">Completed</button>
+            <button type="button" data-booking-filter="cancelled" class="px-3 py-1 rounded-full text-[11px] font-semibold bg-lokalesoft text-lokale hover:bg-lokale/10 transition">Cancelled</button>
+          </div>
+          <span id="myBookingsCountInfo" class="text-[11px] text-muted font-medium">0 reservasi</span>
+        </div>
+        <div id="myBookingsList" class="space-y-3"></div>
+      </div>
+    </div>
     </div>
   </div>
 
   <!-- MODAL COMPARE -->
-  <div id="compareModal" class="fixed inset-0 z-50 hidden bg-ink/60 backdrop-blur-sm flex items-center justify-center p-4">
+  <div id="compareModal" class="hidden fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div data-modal-backdrop="compareModal" class="min-h-full flex items-center justify-center">
     <div class="bg-white rounded-3xl max-w-4xl w-full max-h-[88vh] overflow-y-auto p-6 space-y-4">
       <div class="flex justify-between items-center border-b pb-3"><h3 class="font-display font-bold text-base">Bandingkan Pemandu</h3><div class="flex gap-2"><button id="btnClearCompare" type="button" class="px-3 py-1 rounded-full bg-slate-100 text-xs">Kosongkan</button><button id="btnCloseCompareModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft text-lokale">&times;</button></div></div>
       <div id="compareModalBody" class="text-xs"></div>
     </div>
+    </div>
   </div>
 
+  <!-- TOAST NOTIFICATION -->
+  <div id="sumutgoToast" role="status" aria-live="polite" class="hidden fixed bottom-5 right-5 z-[70] max-w-sm">
+    <div id="sumutgoToastCard" class="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-900 shadow-xl flex items-center gap-2.5">
+      <span id="sumutgoToastDot" class="w-2.5 h-2.5 rounded-full bg-emerald-500 shrink-0"></span>
+      <span id="sumutgoToastMsg"></span>
+    </div>
+  </div>
+
+<?php
+  $scriptDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
+  if ($scriptDir === '/') {
+      $scriptDir = '';
+  }
+  $apiPathPrefix = $scriptDir . '/index.php/api/v1';
+?>
   <script>
-    const TOUR_GUIDES = <?= json_encode($guides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
-    const MASTER_ECOSYSTEM = <?= json_encode([
-        'destinations' => $destinations ?? [],
-        'culinaries'   => $culinaries ?? [],
-        'hotels'       => $hotels ?? [],
-        'transports'   => $transports ?? [],
-    ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
-    const API_BASE_URL = '<?= rtrim(site_url('api/tour-guides'), '/') ?>';
-    const DEFAULT_MAX_PRICE = <?= (int) $maxGuidePrice ?>;
-
-    let state = {
-      activeTab: "directory",
-      viewMode: "cards",
-      search: "",
-      spec: "ALL",
-      status: "ALL",
-      lang: "ALL",
-      district: "ALL",
-      sort: "id_asc",
-      maxPrice: DEFAULT_MAX_PRICE,
-      onlyFavorites: false,
-      favorites: new Set(["TG-001", "TG-013"]),
-      compareList: ["TG-001", "TG-013"],
-      activeGuideId: "TG-001",
-      refLat: 3.5612,
-      refLng: 98.6564,
-      refLabel: "Politeknik Negeri Medan",
-      userLat: null,
-      userLng: null,
-      selectedMapGuideId: null,
-      ecoTab: "destinations"
+    window.SUMUTGO_CONFIG = {
+      apiV1BaseUrl: <?= json_encode($apiPathPrefix) ?>,
+      siteUrl: <?= json_encode($scriptDir !== '' ? $scriptDir : '/') ?>,
+      defaultMaxPrice: <?= (int) $maxGuidePrice ?>,
+      defaultBookDate: <?= json_encode($defaultBookDate) ?>,
+      initialGuides: <?= json_encode($guides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>,
+      masterEcosystem: <?= json_encode([
+          'destinations' => $destinations ?? [],
+          'culinaries'   => $culinaries ?? [],
+          'hotels'       => $hotels ?? [],
+          'transports'   => $transports ?? [],
+      ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>
     };
-    let leafletMap = null, leafletMarkersLayer = null, guideMarkersById = {}, userLocationMarker = null, chartsInitialized = false;
-
-    const formatIdr = n => "Rp " + Number(n || 0).toLocaleString("id-ID");
-    const escapeHtml = v => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
-    const getLangNames = g => {
-      if (Array.isArray(g?.language_names) && g.language_names.length) return g.language_names;
-      if (Array.isArray(g?.languages)) return g.languages.map(l => typeof l === "string" ? l : (l?.language_name || "")).filter(Boolean);
-      if (typeof g?.spoken_languages === "string" && g.spoken_languages.trim()) return g.spoken_languages.split(",").map(s => s.trim()).filter(Boolean);
-      return [];
-    };
-    const formatDistrict = d => {
-      const val = String(d || "Kota Medan").trim();
-      return val.startsWith("Medan ") ? `Kec. ${val}` : val;
-    };
-    const haversineKm = (a1, o1, a2, o2) => {
-      const R = 6371, dA = (a2 - a1) * Math.PI / 180, dO = (o2 - o1) * Math.PI / 180;
-      const a = Math.sin(dA / 2) ** 2 + Math.cos(a1 * Math.PI / 180) * Math.cos(a2 * Math.PI / 180) * Math.sin(dO / 2) ** 2;
-      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    };
-    const statusBadgeClass = s => s === "Tersedia" ? "bg-emerald-50 text-emerald-700 border-emerald-200" : (s === "Sedang Bertugas" ? "bg-amber-50 text-amber-700 border-amber-200" : "bg-rose-50 text-rose-700 border-rose-200");
-
-    function updateTopKpis() {
-      document.getElementById("heroAvailPill").textContent = `${TOUR_GUIDES.filter(g => g.status === "Tersedia").length} Tersedia`;
-      document.getElementById("statTotalGuides").textContent = String(TOUR_GUIDES.length);
-      document.getElementById("compareCountBadge").textContent = String(state.compareList.length);
-      document.getElementById("favCountBadge").textContent = String(state.favorites.size);
-      const favBtn = document.getElementById("btnFilterFavorites");
-      favBtn.className = state.onlyFavorites
-        ? "px-3 py-2 rounded-full bg-rose-500 text-white border border-rose-500 text-xs font-semibold flex items-center gap-1 transition shadow-sm"
-        : "px-3 py-2 rounded-full bg-white hover:bg-rose-50 border border-slate-200 text-xs font-semibold text-ink flex items-center gap-1 transition";
-      favBtn.querySelector("span").className = state.onlyFavorites ? "text-white" : "text-rose-500";
-    }
-
-    function updateViewModeButtons() {
-      const btnCards = document.getElementById("btnViewCards");
-      const btnTable = document.getElementById("btnViewTable");
-      const activeCls = "px-4 py-1.5 rounded-full text-xs font-semibold bg-lokale text-white transition";
-      const inactiveCls = "px-4 py-1.5 rounded-full text-xs font-semibold text-lokale hover:text-lokaledark transition";
-      btnCards.className = state.viewMode === "cards" ? activeCls : inactiveCls;
-      btnTable.className = state.viewMode === "table" ? activeCls : inactiveCls;
-    }
-
-    function getFilteredGuides() {
-      const q = state.search.trim().toLowerCase();
-      return TOUR_GUIDES.filter(g => {
-        const langs = getLangNames(g);
-        if (state.onlyFavorites && !state.favorites.has(g.id)) return false;
-        if (state.spec !== "ALL" && g.specialization !== state.spec) return false;
-        if (state.status !== "ALL" && g.status !== state.status) return false;
-        if (state.lang !== "ALL" && !langs.includes(state.lang)) return false;
-        if (state.district !== "ALL" && g.district !== state.district) return false;
-        if (g.price > state.maxPrice) return false;
-        if (q && ![g.id, g.name, g.agency, g.district, g.address, g.specialization, g.destId, g.destName, g.culinaryId, g.culinaryName, g.hotelId, g.hotelName, g.transportId, g.transportName, langs.join(" ")].join(" ").toLowerCase().includes(q)) return false;
-        return true;
-      }).sort((a, b) => state.sort === "rating_desc" ? b.rating - a.rating : state.sort === "reviews_desc" ? b.reviews - a.reviews : state.sort === "price_asc" ? a.price - b.price : state.sort === "price_desc" ? b.price - a.price : a.id.localeCompare(b.id));
-    }
-
-    function renderDirectory() {
-      updateTopKpis();
-      updateViewModeButtons();
-      const list = getFilteredGuides();
-      document.getElementById("resultCount").textContent = String(list.length);
-      document.getElementById("avgRatingReadout").textContent = (list.length ? (list.reduce((a, b) => a + b.rating, 0) / list.length).toFixed(2) : "0.00") + "★";
-      const grid = document.getElementById("guidesGrid"), wrap = document.getElementById("guidesTableWrapper"), tbody = document.getElementById("guidesTableBody"), empty = document.getElementById("emptyState");
-      if (!list.length) {
-        grid.classList.add("hidden");
-        wrap.classList.add("hidden");
-        empty.classList.remove("hidden");
-        return;
-      }
-      empty.classList.add("hidden");
-      if (state.viewMode === "cards") {
-        grid.classList.remove("hidden");
-        wrap.classList.add("hidden");
-        grid.innerHTML = list.map(g => {
-          const langs = getLangNames(g).join(", ");
-          const distLabel = formatDistrict(g.district);
-          return `<article class="lokale-card rounded-3xl p-5 flex flex-col justify-between">
-            <div>
-              <div class="flex items-center justify-between gap-2 mb-3">
-                <div class="flex items-center gap-1.5 min-w-0">
-                  <span class="font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-lokalesoft text-lokale shrink-0">${escapeHtml(g.id)}</span>
-                  <span class="text-[11px] text-muted truncate">${escapeHtml(g.specialization)}</span>
-                </div>
-                <div class="flex items-center gap-1.5 shrink-0">
-                  <button type="button" data-fav-btn="${escapeHtml(g.id)}" aria-label="Favorit ${escapeHtml(g.name)}" class="w-7 h-7 rounded-full border text-xs transition ${state.favorites.has(g.id) ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500'}">♥</button>
-                  <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
-                </div>
-              </div>
-              <h3 class="font-display font-bold text-base text-ink">${escapeHtml(g.name)}</h3>
-              <p class="text-xs text-muted mt-0.5">${escapeHtml(g.agency)} • ${escapeHtml(distLabel)}</p>
-              <div class="flex flex-wrap items-center gap-2 mt-2.5 text-xs">
-                <span class="text-amber-500 font-bold">★ ${Number(g.rating).toFixed(1)}</span>
-                <span class="text-muted">(${Number(g.reviews).toLocaleString("id-ID")})</span>
-                <span class="text-[11px] font-medium text-lokale">${escapeHtml(langs || "Indonesia")}</span>
-              </div>
-              <div class="mt-4 pt-3 border-t border-slate-100 space-y-1 text-[11px]">
-                <div class="truncate"><span class="font-semibold text-lokale">Wisata:</span> ${escapeHtml(g.destName)}</div>
-                <div class="truncate text-muted"><span class="font-semibold text-ink/70">Kuliner:</span> ${escapeHtml(g.culinaryName)}</div>
-                <div class="truncate text-muted"><span class="font-semibold text-ink/70">Mitra:</span> ${escapeHtml(g.hotelName)} • ${escapeHtml(g.transportName)}</div>
-              </div>
-            </div>
-            <div class="mt-5 pt-3 border-t border-slate-100 flex items-center justify-between gap-2">
-              <div><span class="text-[10px] text-muted block uppercase">Tarif/Hari</span><strong class="text-sm font-mono text-lokale">${formatIdr(g.price)}</strong></div>
-              <div class="flex gap-1.5">
-                <button type="button" data-comp-btn="${escapeHtml(g.id)}" class="px-3 py-1.5 rounded-full text-[11px] font-semibold border transition ${state.compareList.includes(g.id) ? 'bg-lokalesoft text-lokale border-lokale' : 'bg-white text-muted border-slate-200 hover:border-lokale'}">${state.compareList.includes(g.id) ? '✓' : '+'} Banding</button>
-                <button type="button" data-open-guide="${escapeHtml(g.id)}" class="px-4 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white text-xs font-semibold transition">Detail</button>
-              </div>
-            </div>
-          </article>`;
-        }).join("");
-      } else {
-        grid.classList.add("hidden");
-        wrap.classList.remove("hidden");
-        tbody.innerHTML = list.map(g => {
-          const langs = getLangNames(g).join(", ");
-          return `<tr class="hover:bg-lokalesoft/40">
-            <td class="py-3 px-3 font-mono font-bold text-lokale whitespace-nowrap">${escapeHtml(g.id)}</td>
-            <td class="py-3 px-3"><div class="font-bold">${escapeHtml(g.name)}</div><div class="text-[11px] text-muted">${escapeHtml(g.agency)}</div></td>
-            <td class="py-3 px-3">${escapeHtml(g.specialization)}</td>
-            <td class="py-3 px-3 text-amber-500 font-bold whitespace-nowrap">★ ${Number(g.rating).toFixed(1)}</td>
-            <td class="py-3 px-3 text-lokale">${escapeHtml(langs || "Indonesia")}</td>
-            <td class="py-3 px-3">${escapeHtml(g.destName)}</td>
-            <td class="py-3 px-3 text-muted">${escapeHtml(g.hotelName)} • ${escapeHtml(g.transportName)}</td>
-            <td class="py-3 px-3 font-mono font-bold text-lokale whitespace-nowrap">${formatIdr(g.price)}</td>
-            <td class="py-3 px-3 whitespace-nowrap"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span></td>
-            <td class="py-3 px-3 text-right"><button type="button" data-open-guide="${escapeHtml(g.id)}" class="px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] transition">Detail</button></td>
-          </tr>`;
-        }).join("");
-      }
-      document.querySelectorAll("[data-open-guide]").forEach(b => b.addEventListener("click", () => openGuideModal(b.dataset.openGuide)));
-      document.querySelectorAll("[data-fav-btn]").forEach(b => b.addEventListener("click", () => {
-        state.favorites.has(b.dataset.favBtn) ? state.favorites.delete(b.dataset.favBtn) : state.favorites.add(b.dataset.favBtn);
-        renderDirectory();
-      }));
-      document.querySelectorAll("[data-comp-btn]").forEach(b => b.addEventListener("click", () => {
-        const i = state.compareList.indexOf(b.dataset.compBtn);
-        if (i >= 0) state.compareList.splice(i, 1);
-        else {
-          if (state.compareList.length >= 3) state.compareList.shift();
-          state.compareList.push(b.dataset.compBtn);
-        }
-        renderDirectory();
-      }));
-    }
-
-    function resetAllFilters() {
-      state.search = "";
-      state.spec = "ALL";
-      state.status = "ALL";
-      state.lang = "ALL";
-      state.district = "ALL";
-      state.sort = "id_asc";
-      state.maxPrice = DEFAULT_MAX_PRICE;
-      state.onlyFavorites = false;
-
-      document.getElementById("filterSearch").value = "";
-      document.getElementById("filterSpec").value = "ALL";
-      document.getElementById("filterStatus").value = "ALL";
-      document.getElementById("filterLang").value = "ALL";
-      document.getElementById("filterDistrict").value = "ALL";
-      document.getElementById("filterSort").value = "id_asc";
-      document.getElementById("filterMaxPrice").value = String(DEFAULT_MAX_PRICE);
-      document.getElementById("priceReadout").textContent = formatIdr(DEFAULT_MAX_PRICE);
-      renderDirectory();
-    }
-
-    function exportFilteredCsv() {
-      const list = getFilteredGuides();
-      if (!list.length) return;
-      const headers = ["ID", "Nama", "Agensi", "Spesialisasi", "Rating", "Ulasan", "Kecamatan", "Alamat", "Telepon", "Tarif/Hari", "Status", "Bahasa", "Destinasi", "Kuliner", "Hotel", "Transportasi"];
-      const csvCell = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
-      const rows = list.map(g => [
-        g.id, g.name, g.agency, g.specialization, g.rating, g.reviews,
-        formatDistrict(g.district), g.address, g.phone, g.price, g.status,
-        getLangNames(g).join("; "),
-        `${g.destId} ${g.destName}`, `${g.culinaryId} ${g.culinaryName}`,
-        `${g.hotelId} ${g.hotelName}`, `${g.transportId} ${g.transportName}`
-      ].map(csvCell).join(","));
-      const csvContent = "\uFEFF" + [headers.map(csvCell).join(","), ...rows].join("\r\n");
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "sumutgo-pemandu-medan.csv";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    }
-
-    function setMapLocationStatus(msg, tone = "info") {
-      const el = document.getElementById("mapLocationStatus");
-      if (!el) return;
-      if (!msg) {
-        el.textContent = "";
-        el.className = "hidden font-medium";
-        return;
-      }
-      const toneCls = tone === "error" ? "text-rose-600" : tone === "success" ? "text-emerald-700" : "text-lokale";
-      el.textContent = msg;
-      el.className = `font-medium ${toneCls}`;
-    }
-
-    function buildGuidePopupHtml(g) {
-      const langs = getLangNames(g).join(", ") || "Indonesia";
-      const distText = Number.isFinite(g.d) ? `${g.d.toFixed(2)} km dari titik jemput` : formatDistrict(g.district);
-      return `<div class="space-y-2 text-xs text-ink">
-        <div class="flex items-center justify-between gap-2">
-          <span class="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-lokalesoft text-lokale">${escapeHtml(g.id)}</span>
-          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
-        </div>
-        <div>
-          <div class="font-display font-bold text-sm text-ink leading-snug">${escapeHtml(g.name)}</div>
-          <div class="text-[11px] text-muted">${escapeHtml(g.agency)}</div>
-        </div>
-        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
-          <span class="text-amber-500 font-bold">★ ${Number(g.rating).toFixed(1)}</span>
-          <span class="text-muted">(${Number(g.reviews).toLocaleString("id-ID")})</span>
-          <span class="text-lokale font-semibold">• ${escapeHtml(distText)}</span>
-        </div>
-        <div class="pt-1.5 border-t border-slate-100 space-y-1 text-[11px] text-muted">
-          <div><span class="font-semibold text-ink">Spesialisasi:</span> ${escapeHtml(g.specialization)}</div>
-          <div><span class="font-semibold text-ink">Bahasa:</span> ${escapeHtml(langs)}</div>
-          <div><span class="font-semibold text-ink">Destinasi:</span> ${escapeHtml(g.destName || "-")}</div>
-          <div class="leading-snug"><span class="font-semibold text-ink">Basecamp:</span> ${escapeHtml(g.address)}</div>
-        </div>
-        <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
-          <div>
-            <span class="text-[10px] text-muted block">Tarif/Hari</span>
-            <strong class="font-mono text-xs text-lokale">${formatIdr(g.price)}</strong>
-          </div>
-          <button type="button" data-map-detail="${escapeHtml(g.id)}" class="px-3.5 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] font-semibold shadow-sm transition cursor-pointer">Detail</button>
-        </div>
-      </div>`;
-    }
-
-    const LOCATE_BTN_IDLE_HTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="7" stroke-opacity="0.35"/></svg><span>Lokasi Saya</span>`;
-    const LOCATE_BTN_LOADING_HTML = `<svg class="w-3.5 h-3.5 animate-spin text-lokale" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path></svg><span>Mencari...</span>`;
-
-    function setLocateButtonLoading(isLoading) {
-      const btn = document.getElementById("btnMapMyLocation");
-      if (!btn) return;
-      btn.disabled = isLoading;
-      btn.innerHTML = isLoading ? LOCATE_BTN_LOADING_HTML : LOCATE_BTN_IDLE_HTML;
-    }
-
-    function locateUserOnMap() {
-      if (!navigator.geolocation) {
-        setMapLocationStatus("Browser Anda tidak mendukung fitur geolokasi.", "error");
-        return;
-      }
-      setLocateButtonLoading(true);
-      setMapLocationStatus("Mencari lokasi Anda...", "info");
-
-      navigator.geolocation.getCurrentPosition(
-        pos => {
-          const lat = Number(pos.coords.latitude.toFixed(6));
-          const lng = Number(pos.coords.longitude.toFixed(6));
-          state.userLat = lat;
-          state.userLng = lng;
-          state.refLat = lat;
-          state.refLng = lng;
-          state.refLabel = "Lokasi Saya";
-          state.selectedMapGuideId = null;
-
-          document.querySelectorAll(".landmark-btn").forEach(b => {
-            b.className = "landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition";
-          });
-
-          setLocateButtonLoading(false);
-          setMapLocationStatus("Peta difokuskan ke lokasi Anda saat ini.", "success");
-          renderMap();
-
-          if (leafletMap) {
-            let opened = false;
-            const openUserPopup = () => {
-              if (opened) return;
-              opened = true;
-              if (userLocationMarker) userLocationMarker.openPopup();
-            };
-            leafletMap.once("moveend", openUserPopup);
-            setTimeout(openUserPopup, 700);
-            leafletMap.flyTo([lat, lng], 14, { duration: 0.65 });
-          }
-        },
-        err => {
-          setLocateButtonLoading(false);
-          const msg = err && err.code === 1
-            ? "Izin akses lokasi ditolak. Aktifkan izin lokasi di browser Anda."
-            : err && err.code === 3
-              ? "Waktu pencarian lokasi habis. Silakan coba lagi."
-              : "Lokasi tidak dapat dideteksi saat ini.";
-          setMapLocationStatus(msg, "error");
-        },
-        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
-      );
-    }
-
-    function focusGuideOnMap(guideId, opts = {}) {
-      const g = TOUR_GUIDES.find(x => x.id === guideId);
-      if (!g) return;
-      state.selectedMapGuideId = guideId;
-      renderMap({ preserveListScroll: true });
-
-      if (!opts.skipFly && leafletMap) {
-        const targetZoom = Math.max(leafletMap.getZoom(), 15);
-        const targetLatLng = L.latLng(g.lat, g.lng);
-        const needsMove = leafletMap.getCenter().distanceTo(targetLatLng) > 10 || leafletMap.getZoom() < targetZoom;
-        let opened = false;
-        const openSelectedPopup = () => {
-          if (opened) return;
-          opened = true;
-          if (state.selectedMapGuideId === guideId && guideMarkersById[guideId]) {
-            guideMarkersById[guideId].openPopup();
-          }
-        };
-        if (needsMove) {
-          leafletMap.once("moveend", openSelectedPopup);
-          setTimeout(openSelectedPopup, 650);
-          leafletMap.flyTo(targetLatLng, targetZoom, { duration: 0.55 });
-        } else {
-          openSelectedPopup();
-        }
-      }
-    }
-
-    function initOrUpdateMap() {
-      if (!leafletMap) {
-        leafletMap = L.map("medanLeafletMap").setView([state.refLat, state.refLng], 12);
-        L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxZoom: 18 }).addTo(leafletMap);
-        leafletMarkersLayer = L.layerGroup().addTo(leafletMap);
-
-        const LocateControl = L.Control.extend({
-          options: { position: "topright" },
-          onAdd: () => {
-            const container = L.DomUtil.create("div", "leaflet-control leaflet-control-locate");
-            const btn = L.DomUtil.create("button", "leaflet-control-locate-btn", container);
-            btn.type = "button";
-            btn.id = "btnMapMyLocation";
-            btn.title = "Fokus ke Lokasi Saya";
-            btn.setAttribute("aria-label", "Fokus ke Lokasi Saya");
-            btn.innerHTML = LOCATE_BTN_IDLE_HTML;
-            L.DomEvent.disableClickPropagation(container);
-            L.DomEvent.disableScrollPropagation(container);
-            btn.addEventListener("click", e => {
-              e.preventDefault();
-              e.stopPropagation();
-              locateUserOnMap();
-            });
-            return container;
-          }
-        });
-        new LocateControl().addTo(leafletMap);
-
-        document.getElementById("medanLeafletMap").addEventListener("click", e => {
-          const detailBtn = e.target.closest("[data-map-detail]");
-          if (detailBtn) {
-            e.preventDefault();
-            e.stopPropagation();
-            openGuideModal(detailBtn.dataset.mapDetail);
-          }
-        });
-
-        leafletMap.on("click", e => {
-          state.refLat = Number(e.latlng.lat.toFixed(4));
-          state.refLng = Number(e.latlng.lng.toFixed(4));
-          state.refLabel = `Titik Peta (${state.refLat}, ${state.refLng})`;
-          setMapLocationStatus("");
-          document.querySelectorAll(".landmark-btn").forEach(btn => {
-            btn.className = "landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition";
-          });
-          renderMap();
-        });
-      }
-      setTimeout(() => { leafletMap.invalidateSize(); renderMap(); }, 150);
-    }
-
-    function renderMap(opts = {}) {
-      if (!leafletMap) return;
-      const listEl = document.getElementById("nearestGuidesList");
-      const prevScroll = opts.preserveListScroll && listEl ? listEl.scrollTop : 0;
-
-      leafletMarkersLayer.clearLayers();
-      guideMarkersById = {};
-      userLocationMarker = null;
-      document.getElementById("activeRefLabel").textContent = state.refLabel;
-
-      const locBtn = document.getElementById("btnMapMyLocation");
-      if (locBtn && !locBtn.disabled) {
-        locBtn.classList.toggle("is-active", state.refLabel === "Lokasi Saya" && state.userLat !== null);
-      }
-
-      const onlyAvail = document.getElementById("chkMapOnlyAvailable").checked;
-
-      if (state.userLat !== null && state.userLng !== null) {
-        L.circleMarker([state.userLat, state.userLng], {
-          radius: 16,
-          fillColor: "#2563eb",
-          color: "#2563eb",
-          weight: 1,
-          opacity: 0.35,
-          fillOpacity: 0.16,
-          interactive: false
-        }).addTo(leafletMarkersLayer);
-
-        userLocationMarker = L.circleMarker([state.userLat, state.userLng], {
-          radius: 8,
-          fillColor: "#2563eb",
-          color: "#ffffff",
-          weight: 3,
-          fillOpacity: 1
-        }).bindPopup(`<strong>Lokasi Saya Saat Ini</strong><br/><span class="text-[11px] text-muted">${state.userLat}, ${state.userLng}</span>`).addTo(leafletMarkersLayer);
-      }
-
-      if (!(state.refLabel === "Lokasi Saya" && state.userLat !== null && state.userLng !== null)) {
-        L.circleMarker([state.refLat, state.refLng], {
-          radius: 9,
-          fillColor: "#f59e0b",
-          color: "#14242b",
-          weight: 2.5,
-          fillOpacity: 1
-        }).bindPopup(`<strong>Titik Jemput Aktif</strong><br/>${escapeHtml(state.refLabel)}`).addTo(leafletMarkersLayer);
-      }
-
-      const ranked = TOUR_GUIDES
-        .filter(g => !onlyAvail || g.status === "Tersedia")
-        .map(g => ({ ...g, d: haversineKm(state.refLat, state.refLng, g.lat, g.lng) }))
-        .sort((a, b) => a.d - b.d);
-
-      ranked.forEach(g => {
-        const isSelected = state.selectedMapGuideId === g.id;
-        if (isSelected) {
-          L.circleMarker([g.lat, g.lng], {
-            radius: 16,
-            fillColor: "#07779d",
-            color: "#07779d",
-            weight: 1.5,
-            opacity: 0.5,
-            fillOpacity: 0.18,
-            interactive: false
-          }).addTo(leafletMarkersLayer);
-        }
-
-        const marker = L.circleMarker([g.lat, g.lng], {
-          radius: isSelected ? 10 : 7,
-          fillColor: g.status === "Tersedia" ? "#07779d" : "#e11d48",
-          color: isSelected ? "#14242b" : "#ffffff",
-          weight: isSelected ? 3 : 2,
-          fillOpacity: isSelected ? 1 : 0.9
-        }).bindPopup(buildGuidePopupHtml(g), { maxWidth: 290, autoPan: true }).addTo(leafletMarkersLayer);
-
-        marker.on("click", () => {
-          if (state.selectedMapGuideId !== g.id) {
-            state.selectedMapGuideId = g.id;
-            renderMap({ preserveListScroll: true });
-            const focusedMarker = guideMarkersById[g.id];
-            if (focusedMarker) focusedMarker.openPopup();
-            const cardEl = listEl?.querySelector(`[data-map-guide="${CSS.escape(g.id)}"]`);
-            if (cardEl) cardEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
-          }
-        });
-
-        if (isSelected) marker.bringToFront();
-        guideMarkersById[g.id] = marker;
-      });
-
-      listEl.innerHTML = ranked.length
-        ? ranked.slice(0, 12).map((g, i) => {
-            const isSelected = state.selectedMapGuideId === g.id;
-            return `<div role="button" tabindex="0" data-map-guide="${escapeHtml(g.id)}" class="py-2.5 px-2.5 my-1 rounded-xl flex items-center justify-between gap-2.5 text-xs cursor-pointer transition border ${isSelected ? 'bg-white border-lokale shadow-sm ring-1 ring-lokale/30' : 'border-transparent hover:bg-white/80 hover:border-lokaleborder'}">
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-1.5">
-                  <strong class="text-ink truncate">#${i + 1} ${escapeHtml(g.name)}</strong>
-                </div>
-                <div class="text-[11px] text-muted truncate mt-0.5">${escapeHtml(formatDistrict(g.district))} • ${escapeHtml(g.status)}</div>
-                <div class="text-[11px] text-lokale font-medium truncate mt-0.5">★ ${Number(g.rating).toFixed(1)} • ${formatIdr(g.price)}/hr</div>
-              </div>
-              <div class="flex flex-col items-end gap-1.5 shrink-0">
-                <span class="font-mono font-bold text-lokale text-[11px]">${g.d.toFixed(2)} km</span>
-                <button type="button" data-map-select="${escapeHtml(g.id)}" class="px-3.5 py-1.5 min-h-[30px] rounded-full bg-lokale hover:bg-lokaledark active:scale-95 text-white text-[11px] font-semibold shadow-sm transition cursor-pointer">Pilih</button>
-              </div>
-            </div>`;
-          }).join("")
-        : `<p class="text-xs text-muted py-6 text-center">Tidak ada pemandu yang sesuai filter.</p>`;
-
-      if (opts.preserveListScroll) {
-        listEl.scrollTop = prevScroll;
-      }
-
-      listEl.querySelectorAll("[data-map-guide]").forEach(item => {
-        item.addEventListener("click", () => focusGuideOnMap(item.dataset.mapGuide));
-        item.addEventListener("keydown", e => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault();
-            focusGuideOnMap(item.dataset.mapGuide);
-          }
-        });
-      });
-
-      listEl.querySelectorAll("[data-map-select]").forEach(btn => {
-        btn.addEventListener("click", e => {
-          e.stopPropagation();
-          const id = btn.dataset.mapSelect;
-          focusGuideOnMap(id, { skipFly: true });
-          openGuideModal(id);
-        });
-      });
-    }
-
-    function updatePlanner() {
-      const g = TOUR_GUIDES.find(x => x.id === document.getElementById("planGuideSelect").value) || TOUR_GUIDES[0];
-      if (!g) return;
-      const days = Math.max(1, Number(document.getElementById("planDays").value || 1));
-      const pax = Math.max(1, Number(document.getElementById("planPax").value || 1));
-      const hTier = document.getElementById("planHotelTier").value, tMode = document.getElementById("planTransportMode").value;
-      const gCost = g.price * days;
-      const tCost = (tMode === "hiace" ? 1250000 : tMode === "bus" ? 2600000 : tMode === "self" ? 0 : 650000) * days;
-      const hCost = hTier === "none" ? 0 : (hTier === "luxury" ? 1450000 : hTier === "budget" ? 420000 : 750000) * Math.ceil(pax / 2) * Math.max(1, days - 1);
-      const cCost = pax * days * 75000, total = gCost + tCost + hCost + cCost;
-      document.getElementById("planSummaryTitle").textContent = `Paket ${g.specialization} (${days} Hari • ${pax} Peserta)`;
-      document.getElementById("planCostPerPax").textContent = `${formatIdr(Math.round(total / pax))} / pax`;
-      document.getElementById("planGuideLabel").textContent = g.name;
-      document.getElementById("planGuideCost").textContent = formatIdr(gCost);
-      document.getElementById("planTransLabel").textContent = tMode === "self" ? "Kendaraan Pribadi" : g.transportName;
-      document.getElementById("planTransCost").textContent = formatIdr(tCost);
-      document.getElementById("planHotelLabel").textContent = hTier === "none" ? "Tanpa Menginap" : g.hotelName;
-      document.getElementById("planHotelCost").textContent = formatIdr(hCost);
-      document.getElementById("planCulLabel").textContent = g.culinaryName;
-      document.getElementById("planCulCost").textContent = formatIdr(cCost);
-      document.getElementById("planGrandTotal").textContent = formatIdr(total);
-      const dayTwoLabel = days > 1 ? `Hari 2–${days}:` : `Sore – Malam:`;
-      const stayNote = hTier === "none" ? "tanpa menginap" : `menginap di ${escapeHtml(g.hotelName)}`;
-      document.getElementById("planItineraryTimeline").innerHTML = `
-        <div class="p-3.5 rounded-2xl bg-lokalesoft/50 border border-lokaleborder"><strong class="text-lokale">Hari 1:</strong> Penjemputan di ${escapeHtml(formatDistrict(g.district))} menuju <strong>${escapeHtml(g.destName)}</strong> &amp; kuliner <strong>${escapeHtml(g.culinaryName)}</strong>.</div>
-        <div class="p-3.5 rounded-2xl bg-sand/70 border border-slate-200"><strong>${dayTwoLabel}</strong> Eksplorasi ${escapeHtml(g.specialization)} bersama ${escapeHtml(g.name)}, ${stayNote}.</div>`;
-    }
-
-    function renderAnalytics() {
-      if (!chartsInitialized && window.Chart) {
-        chartsInitialized = true;
-        const sc = {}, ss = {}, lc = {}, st = { Tersedia: 0, "Sedang Bertugas": 0, Booked: 0 };
-        TOUR_GUIDES.forEach(g => {
-          sc[g.specialization] = (sc[g.specialization] || 0) + 1;
-          ss[g.specialization] = (ss[g.specialization] || 0) + g.price;
-          st[g.status] = (st[g.status] || 0) + 1;
-          getLangNames(g).forEach(l => { lc[l] = (lc[l] || 0) + 1; });
-        });
-        const sortedLangs = Object.entries(lc).sort((a, b) => b[1] - a[1]);
-        new Chart(document.getElementById("chartSpecializations"), {
-          type: "bar",
-          data: { labels: Object.keys(sc).map(s => s.split("&")[0].trim()), datasets: [{ label: "Rata-rata (Ribu Rp)", data: Object.keys(sc).map(s => Math.round(ss[s] / sc[s] / 1000)), backgroundColor: "#07779d", borderRadius: 8 }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-        });
-        new Chart(document.getElementById("chartLanguages"), {
-          type: "bar",
-          data: { labels: sortedLangs.map(([l]) => l), datasets: [{ label: "Jumlah Pemandu", data: sortedLangs.map(([, c]) => c), backgroundColor: "#389ec0", borderRadius: 8 }] },
-          options: { indexAxis: "y", responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
-        });
-        new Chart(document.getElementById("chartStatuses"), {
-          type: "doughnut",
-          data: { labels: Object.keys(st), datasets: [{ data: Object.values(st), backgroundColor: ["#07779d", "#f59e0b", "#e11d48"] }] },
-          options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: "bottom" } } }
-        });
-      }
-      renderEco();
-    }
-
-    function renderEco() {
-      document.querySelectorAll(".eco-tab-btn").forEach(b => {
-        b.className = b.dataset.ecoTab === state.ecoTab
-          ? "eco-tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-lokale text-white transition"
-          : "eco-tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:text-lokaledark transition";
-      });
-
-      const counts = {};
-      TOUR_GUIDES.forEach(g => {
-        const k = state.ecoTab === "culinaries" ? g.culinaryId : state.ecoTab === "hotels" ? g.hotelId : state.ecoTab === "transports" ? g.transportId : g.destId;
-        if (k) counts[k] = (counts[k] || 0) + 1;
-      });
-
-      const categoryLabel = state.ecoTab === "culinaries" ? "Kuliner Pilihan" : state.ecoTab === "hotels" ? "Hotel Mitra" : state.ecoTab === "transports" ? "Armada Transportasi" : "Destinasi Wisata";
-      const masterList = MASTER_ECOSYSTEM[state.ecoTab] || [];
-      const items = masterList.map(row => {
-        const k = row.destination_code || row.culinary_code || row.hotel_code || row.transport_code || "";
-        const n = row.destination_name || row.culinary_name || row.hotel_name || row.transport_name || "";
-        return { k, n, c: counts[k] || 0 };
-      });
-
-      document.getElementById("ecosystemEntitiesGrid").innerHTML = items.map(x => `
-        <div class="bg-lokalesoft/40 border border-lokaleborder rounded-2xl p-3.5 text-xs flex flex-col justify-between">
-          <div>
-            <div class="flex justify-between items-center gap-2"><span class="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-white border border-lokaleborder text-lokale">${categoryLabel}</span><span class="text-muted text-[11px]">${x.c} Pemandu</span></div>
-            <div class="font-bold text-ink mt-2">${escapeHtml(x.n)}</div>
-          </div>
-          <button type="button" data-eco-q="${escapeHtml(x.k)}" class="mt-2.5 w-full py-1.5 rounded-full bg-white hover:bg-lokale hover:text-white text-lokale border border-lokaleborder font-semibold text-[11px] transition">Lihat Pemandu Terkait</button>
-        </div>`).join("");
-
-      document.querySelectorAll("[data-eco-q]").forEach(b => b.addEventListener("click", () => {
-        resetAllFilters();
-        state.search = b.dataset.ecoQ;
-        document.getElementById("filterSearch").value = state.search;
-        switchTab("directory");
-        renderDirectory();
-        document.getElementById("direktori-pemandu").scrollIntoView({ behavior: "smooth" });
-      }));
-    }
-
-    function openGuideModal(id) {
-      const g = TOUR_GUIDES.find(x => x.id === id);
-      if (!g) return;
-      state.activeGuideId = g.id;
-      document.getElementById("modalGuideId").textContent = `${g.id} • ${g.status}`;
-      document.getElementById("modalGuideName").textContent = g.name;
-      document.getElementById("modalAgency").textContent = g.agency;
-      document.getElementById("modalAddress").textContent = g.address;
-      document.getElementById("modalSpec").textContent = g.specialization;
-      document.getElementById("modalLangs").textContent = getLangNames(g).join(", ") || "Indonesia";
-      document.getElementById("modalPrice").textContent = formatIdr(g.price) + " / hari";
-      document.getElementById("modalRating").textContent = `★ ${Number(g.rating).toFixed(1)} (${g.reviews} ulasan)`;
-      document.getElementById("modalPhone").textContent = g.phone ? `+${g.phone}` : "-";
-      document.getElementById("modalDestName").textContent = g.destName || "-";
-      document.getElementById("modalCulName").textContent = g.culinaryName || "-";
-      document.getElementById("modalHotelName").textContent = g.hotelName || "-";
-      document.getElementById("modalTransName").textContent = g.transportName || "-";
-      document.getElementById("bookTotalReadout").textContent = formatIdr(g.price * Math.max(1, Number(document.getElementById("bookDays").value || 1)));
-      document.getElementById("bookingFeedback").classList.add("hidden");
-      document.getElementById("guideModal").classList.remove("hidden");
-    }
-
-    function switchTab(t) {
-      state.activeTab = t;
-      ["directory", "map", "planner", "analytics"].forEach(k => document.getElementById("view-" + k).classList.toggle("hidden", k !== t));
-      document.querySelectorAll(".main-tab-btn").forEach(b => {
-        b.className = b.dataset.mainTab === t
-          ? "main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition bg-lokale text-white shadow-sm"
-          : "main-tab-btn px-4 py-2 rounded-full text-xs font-semibold transition text-ink/80 hover:text-lokale";
-      });
-      document.querySelectorAll(".main-tab-mobile").forEach(b => {
-        b.className = b.dataset.mainTab === t
-          ? "main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokale text-white transition"
-          : "main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokalesoft text-lokale transition";
-      });
-      if (t === "map") initOrUpdateMap();
-      if (t === "planner") updatePlanner();
-      if (t === "analytics") renderAnalytics();
-    }
-
-    function closeAllModals() {
-      document.getElementById("guideModal").classList.add("hidden");
-      document.getElementById("compareModal").classList.add("hidden");
-    }
-
-    window.addEventListener("DOMContentLoaded", () => {
-      const dists = Array.from(new Set(TOUR_GUIDES.map(g => g.district))).sort();
-      document.getElementById("filterDistrict").innerHTML = `<option value="ALL">Semua Kecamatan (${dists.length})</option>` + dists.map(d => `<option value="${escapeHtml(d)}">${escapeHtml(formatDistrict(d))}</option>`).join("");
-      document.getElementById("planGuideSelect").innerHTML = TOUR_GUIDES.map(g => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.id)} — ${escapeHtml(g.name)} (${formatIdr(g.price)})</option>`).join("");
-      renderDirectory();
-
-      document.getElementById("brandHomeLink").addEventListener("click", () => switchTab("directory"));
-      document.querySelectorAll("[data-main-tab]").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.mainTab)));
-      document.getElementById("btnHeroSwitchMap").addEventListener("click", () => switchTab("map"));
-      document.getElementById("btnHeroSwitchPlanner").addEventListener("click", () => switchTab("planner"));
-      document.getElementById("btnPartnershipOpenEco").addEventListener("click", () => switchTab("analytics"));
-      document.getElementById("btnViewCards").addEventListener("click", () => { state.viewMode = "cards"; renderDirectory(); });
-      document.getElementById("btnViewTable").addEventListener("click", () => { state.viewMode = "table"; renderDirectory(); });
-      document.getElementById("btnExportCsvFiltered").addEventListener("click", exportFilteredCsv);
-
-      const filterBindings = [
-        ["filterSearch", "search", "input"],
-        ["filterSpec", "spec", "change"],
-        ["filterStatus", "status", "change"],
-        ["filterLang", "lang", "change"],
-        ["filterDistrict", "district", "change"],
-        ["filterSort", "sort", "change"]
-      ];
-      filterBindings.forEach(([elId, key, ev]) => {
-        const el = document.getElementById(elId);
-        el.addEventListener(ev, e => { state[key] = e.target.value; renderDirectory(); });
-        if (ev === "change") {
-          el.addEventListener("input", e => { state[key] = e.target.value; renderDirectory(); });
-        }
-      });
-
-      document.getElementById("filterMaxPrice").addEventListener("input", e => {
-        state.maxPrice = Number(e.target.value);
-        document.getElementById("priceReadout").textContent = formatIdr(state.maxPrice);
-        renderDirectory();
-      });
-
-      document.querySelectorAll(".quick-dest-card").forEach(c => c.addEventListener("click", () => {
-        resetAllFilters();
-        state.search = c.dataset.quickDest;
-        document.getElementById("filterSearch").value = state.search;
-        renderDirectory();
-        document.getElementById("direktori-pemandu").scrollIntoView({ behavior: "smooth" });
-      }));
-
-      document.getElementById("btnResetFilters").addEventListener("click", resetAllFilters);
-      document.getElementById("btnEmptyReset").addEventListener("click", resetAllFilters);
-      document.getElementById("btnFilterFavorites").addEventListener("click", () => {
-        state.onlyFavorites = !state.onlyFavorites;
-        switchTab("directory");
-        renderDirectory();
-      });
-
-      document.querySelectorAll(".landmark-btn").forEach(b => b.addEventListener("click", () => {
-        document.querySelectorAll(".landmark-btn").forEach(btn => {
-          btn.className = btn === b
-            ? "landmark-btn px-3.5 py-2 rounded-full bg-lokale text-white font-semibold text-xs transition"
-            : "landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition";
-        });
-        const p = b.dataset.landmark.split(",");
-        state.refLat = parseFloat(p[0]);
-        state.refLng = parseFloat(p[1]);
-        state.refLabel = p.slice(2).join(",");
-        state.selectedMapGuideId = null;
-        setMapLocationStatus("");
-        if (leafletMap) leafletMap.setView([state.refLat, state.refLng], 12);
-        renderMap();
-      }));
-
-      document.getElementById("chkMapOnlyAvailable").addEventListener("change", () => renderMap());
-      ["planGuideSelect", "planDays", "planPax", "planHotelTier", "planTransportMode"].forEach(id => document.getElementById(id).addEventListener("change", updatePlanner));
-      document.getElementById("btnBookFromPlanner").addEventListener("click", () => openGuideModal(document.getElementById("planGuideSelect").value));
-      document.querySelectorAll(".eco-tab-btn").forEach(b => b.addEventListener("click", () => { state.ecoTab = b.dataset.ecoTab; renderEco(); }));
-
-      document.getElementById("btnCloseGuideModal").addEventListener("click", () => document.getElementById("guideModal").classList.add("hidden"));
-      document.getElementById("bookDays").addEventListener("input", e => {
-        const g = TOUR_GUIDES.find(x => x.id === state.activeGuideId);
-        if (g) document.getElementById("bookTotalReadout").textContent = formatIdr(g.price * Math.max(1, Number(e.target.value || 1)));
-      });
-
-      document.getElementById("bookingForm").addEventListener("submit", async e => {
-        e.preventDefault();
-        const g = TOUR_GUIDES.find(x => x.id === state.activeGuideId);
-        if (!g) return;
-        const traveler = document.getElementById("bookTravelerName").value.trim();
-        const dateVal = document.getElementById("bookDate").value;
-        const days = Math.max(1, Number(document.getElementById("bookDays").value || 1));
-        const btn = document.getElementById("btnSubmitBooking");
-        const fb = document.getElementById("bookingFeedback");
-        btn.disabled = true;
-        btn.textContent = "Memproses...";
-        try {
-          const resp = await fetch(`${API_BASE_URL}/${encodeURIComponent(g.id)}/book`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ traveler_name: traveler, tour_date: dateVal, duration_days: days })
-          });
-          const data = await resp.json();
-          if (!resp.ok) throw new Error(data.message || "Gagal mencatat booking.");
-          g.status = "Booked";
-          document.getElementById("modalGuideId").textContent = `${g.id} • ${g.status}`;
-          fb.className = "p-3 rounded-2xl bg-lokalesoft border border-lokale text-lokaledeep font-medium";
-          fb.textContent = data.message || `Booking berhasil untuk ${traveler} bersama ${g.name} (${days} hari). Status diperbarui menjadi Booked.`;
-          fb.classList.remove("hidden");
-          renderDirectory();
-          if (state.activeTab === "map") renderMap({ preserveListScroll: true });
-        } catch (err) {
-          fb.className = "p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 font-medium";
-          fb.textContent = err.message || "Terjadi kesalahan saat menyimpan booking.";
-          fb.classList.remove("hidden");
-        } finally {
-          btn.disabled = false;
-          btn.textContent = "Konfirmasi Booking";
-        }
-      });
-
-      document.getElementById("btnToggleCompareModal").addEventListener("click", () => {
-        const items = state.compareList.map(id => TOUR_GUIDES.find(g => g.id === id)).filter(Boolean);
-        const colClass = items.length === 1 ? "md:grid-cols-1" : items.length === 2 ? "md:grid-cols-2" : "md:grid-cols-3";
-        document.getElementById("compareModalBody").innerHTML = items.length
-          ? `<div class="grid grid-cols-1 ${colClass} gap-4">` + items.map(g => `
-              <div class="bg-lokalesoft/50 border border-lokaleborder rounded-2xl p-4 space-y-1.5 flex flex-col justify-between">
-                <div class="space-y-1.5">
-                  <div class="flex items-center justify-between gap-2">
-                    <strong class="text-lokale font-mono">${escapeHtml(g.id)}</strong>
-                    <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
-                  </div>
-                  <h4 class="font-bold text-base text-ink">${escapeHtml(g.name)}</h4>
-                  <div class="text-muted">${escapeHtml(g.specialization)}</div>
-                  <div>Rating: <strong class="text-amber-500">★ ${Number(g.rating).toFixed(1)}</strong> (${g.reviews})</div>
-                  <div>Tarif: <strong class="text-lokale font-mono">${formatIdr(g.price)}</strong>/hari</div>
-                  <div>Bahasa: ${escapeHtml(getLangNames(g).join(", "))}</div>
-                  <div>Wisata: ${escapeHtml(g.destName)}</div>
-                  <div>Kuliner: ${escapeHtml(g.culinaryName)}</div>
-                  <div>Hotel: ${escapeHtml(g.hotelName)}</div>
-                </div>
-                <button type="button" data-compare-detail="${escapeHtml(g.id)}" class="mt-3 w-full py-1.5 rounded-full bg-lokale text-white font-semibold text-[11px]">Lihat Detail &amp; Booking</button>
-              </div>`).join("") + `</div>`
-          : `<p class="text-center py-6 text-muted">Klik tombol + Banding pada kartu pemandu untuk membandingkan.</p>`;
-        document.querySelectorAll("[data-compare-detail]").forEach(b => b.addEventListener("click", () => {
-          document.getElementById("compareModal").classList.add("hidden");
-          openGuideModal(b.dataset.compareDetail);
-        }));
-        document.getElementById("compareModal").classList.remove("hidden");
-      });
-
-      document.getElementById("btnCloseCompareModal").addEventListener("click", () => document.getElementById("compareModal").classList.add("hidden"));
-      document.getElementById("btnClearCompare").addEventListener("click", () => { state.compareList = []; document.getElementById("compareModal").classList.add("hidden"); renderDirectory(); });
-
-      ["guideModal", "compareModal"].forEach(modalId => {
-        document.getElementById(modalId).addEventListener("click", e => {
-          if (e.target.id === modalId) document.getElementById(modalId).classList.add("hidden");
-        });
-      });
-      document.addEventListener("keydown", e => {
-        if (e.key === "Escape") closeAllModals();
-      });
-    });
   </script>
+  <script src="<?= esc($scriptDir . '/assets/js/api.js') ?>?v=<?= filemtime(FCPATH . 'assets/js/api.js') ?>"></script>
+  <script src="<?= esc($scriptDir . '/assets/js/auth.js') ?>?v=<?= filemtime(FCPATH . 'assets/js/auth.js') ?>"></script>
+  <script src="<?= esc($scriptDir . '/assets/js/app.js') ?>?v=<?= filemtime(FCPATH . 'assets/js/app.js') ?>"></script>
 </body>
 </html>
