@@ -55,6 +55,22 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
     .lokale-card { background: #ffffff; border: 1px solid #e2eef3; transition: all 0.25s ease; }
     .lokale-card:hover { border-color: #07779d; box-shadow: 0 14px 34px -12px rgba(7, 119, 157, 0.16); transform: translateY(-2px); }
     #medanLeafletMap { height: 520px; width: 100%; border-radius: 1rem; z-index: 10; }
+    .leaflet-control-zoom { border: 1px solid #d0e6ef !important; box-shadow: 0 2px 10px rgba(20, 36, 43, 0.12) !important; border-radius: 12px !important; overflow: hidden; }
+    .leaflet-control-zoom a { color: #14242b !important; border-bottom-color: #e2eef3 !important; width: 32px !important; height: 32px !important; line-height: 32px !important; font-weight: 600; }
+    .leaflet-control-zoom a:hover { background: #ebf5f9 !important; color: #07779d !important; }
+    .leaflet-control-locate { border: none !important; background: transparent !important; box-shadow: none !important; margin: 10px 10px 0 0 !important; }
+    .leaflet-control-locate-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #ffffff; color: #14242b; border: 1px solid #d0e6ef;
+      padding: 7px 14px; font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 600;
+      border-radius: 9999px; box-shadow: 0 2px 10px rgba(20, 36, 43, 0.14);
+      cursor: pointer; transition: all 0.2s ease; line-height: 1.2;
+    }
+    .leaflet-control-locate-btn:hover { background: #ebf5f9; color: #07779d; border-color: #07779d; }
+    .leaflet-control-locate-btn:disabled { opacity: 0.75; cursor: wait; }
+    .leaflet-control-locate-btn.is-active { background: #07779d; color: #ffffff; border-color: #07779d; }
+    .leaflet-popup-content-wrapper { border-radius: 16px !important; box-shadow: 0 12px 28px -8px rgba(20, 36, 43, 0.25) !important; padding: 2px !important; }
+    .leaflet-popup-content { margin: 12px 14px !important; min-width: 230px; max-width: 280px; font-family: 'Inter', sans-serif; }
   </style>
 </head>
 <body class="bg-white text-ink antialiased selection:bg-lokale selection:text-white">
@@ -398,7 +414,10 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div class="lg:col-span-8 space-y-2">
             <div id="medanLeafletMap" class="border border-lokaleborder"></div>
-            <div class="text-[11px] text-muted">Titik Jemput: <strong id="activeRefLabel" class="text-lokale">Politeknik Negeri Medan</strong></div>
+            <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
+              <div>Titik Jemput: <strong id="activeRefLabel" class="text-lokale">Politeknik Negeri Medan</strong></div>
+              <div id="mapLocationStatus" class="hidden font-medium"></div>
+            </div>
           </div>
           <div class="lg:col-span-4 flex flex-col h-[520px] bg-lokalesoft/40 border border-lokaleborder rounded-2xl p-4">
             <div class="flex items-center justify-between pb-3 border-b border-lokaleborder">
@@ -584,9 +603,12 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       refLat: 3.5612,
       refLng: 98.6564,
       refLabel: "Politeknik Negeri Medan",
+      userLat: null,
+      userLng: null,
+      selectedMapGuideId: null,
       ecoTab: "destinations"
     };
-    let leafletMap = null, leafletMarkersLayer = null, chartsInitialized = false;
+    let leafletMap = null, leafletMarkersLayer = null, guideMarkersById = {}, userLocationMarker = null, chartsInitialized = false;
 
     const formatIdr = n => "Rp " + Number(n || 0).toLocaleString("id-ID");
     const escapeHtml = v => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
@@ -777,15 +799,184 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       URL.revokeObjectURL(url);
     }
 
+    function setMapLocationStatus(msg, tone = "info") {
+      const el = document.getElementById("mapLocationStatus");
+      if (!el) return;
+      if (!msg) {
+        el.textContent = "";
+        el.className = "hidden font-medium";
+        return;
+      }
+      const toneCls = tone === "error" ? "text-rose-600" : tone === "success" ? "text-emerald-700" : "text-lokale";
+      el.textContent = msg;
+      el.className = `font-medium ${toneCls}`;
+    }
+
+    function buildGuidePopupHtml(g) {
+      const langs = getLangNames(g).join(", ") || "Indonesia";
+      const distText = Number.isFinite(g.d) ? `${g.d.toFixed(2)} km dari titik jemput` : formatDistrict(g.district);
+      return `<div class="space-y-2 text-xs text-ink">
+        <div class="flex items-center justify-between gap-2">
+          <span class="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-lokalesoft text-lokale">${escapeHtml(g.id)}</span>
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+        </div>
+        <div>
+          <div class="font-display font-bold text-sm text-ink leading-snug">${escapeHtml(g.name)}</div>
+          <div class="text-[11px] text-muted">${escapeHtml(g.agency)}</div>
+        </div>
+        <div class="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px]">
+          <span class="text-amber-500 font-bold">★ ${Number(g.rating).toFixed(1)}</span>
+          <span class="text-muted">(${Number(g.reviews).toLocaleString("id-ID")})</span>
+          <span class="text-lokale font-semibold">• ${escapeHtml(distText)}</span>
+        </div>
+        <div class="pt-1.5 border-t border-slate-100 space-y-1 text-[11px] text-muted">
+          <div><span class="font-semibold text-ink">Spesialisasi:</span> ${escapeHtml(g.specialization)}</div>
+          <div><span class="font-semibold text-ink">Bahasa:</span> ${escapeHtml(langs)}</div>
+          <div><span class="font-semibold text-ink">Destinasi:</span> ${escapeHtml(g.destName || "-")}</div>
+          <div class="leading-snug"><span class="font-semibold text-ink">Basecamp:</span> ${escapeHtml(g.address)}</div>
+        </div>
+        <div class="pt-2 border-t border-slate-100 flex items-center justify-between gap-2">
+          <div>
+            <span class="text-[10px] text-muted block">Tarif/Hari</span>
+            <strong class="font-mono text-xs text-lokale">${formatIdr(g.price)}</strong>
+          </div>
+          <button type="button" data-map-detail="${escapeHtml(g.id)}" class="px-3.5 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] font-semibold shadow-sm transition cursor-pointer">Detail</button>
+        </div>
+      </div>`;
+    }
+
+    const LOCATE_BTN_IDLE_HTML = `<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path stroke-linecap="round" d="M12 2v3m0 14v3M2 12h3m14 0h3"/><circle cx="12" cy="12" r="7" stroke-opacity="0.35"/></svg><span>Lokasi Saya</span>`;
+    const LOCATE_BTN_LOADING_HTML = `<svg class="w-3.5 h-3.5 animate-spin text-lokale" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v3a5 5 0 00-5 5H4z"></path></svg><span>Mencari...</span>`;
+
+    function setLocateButtonLoading(isLoading) {
+      const btn = document.getElementById("btnMapMyLocation");
+      if (!btn) return;
+      btn.disabled = isLoading;
+      btn.innerHTML = isLoading ? LOCATE_BTN_LOADING_HTML : LOCATE_BTN_IDLE_HTML;
+    }
+
+    function locateUserOnMap() {
+      if (!navigator.geolocation) {
+        setMapLocationStatus("Browser Anda tidak mendukung fitur geolokasi.", "error");
+        return;
+      }
+      setLocateButtonLoading(true);
+      setMapLocationStatus("Mencari lokasi Anda...", "info");
+
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          const lat = Number(pos.coords.latitude.toFixed(6));
+          const lng = Number(pos.coords.longitude.toFixed(6));
+          state.userLat = lat;
+          state.userLng = lng;
+          state.refLat = lat;
+          state.refLng = lng;
+          state.refLabel = "Lokasi Saya";
+          state.selectedMapGuideId = null;
+
+          document.querySelectorAll(".landmark-btn").forEach(b => {
+            b.className = "landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition";
+          });
+
+          setLocateButtonLoading(false);
+          setMapLocationStatus("Peta difokuskan ke lokasi Anda saat ini.", "success");
+          renderMap();
+
+          if (leafletMap) {
+            let opened = false;
+            const openUserPopup = () => {
+              if (opened) return;
+              opened = true;
+              if (userLocationMarker) userLocationMarker.openPopup();
+            };
+            leafletMap.once("moveend", openUserPopup);
+            setTimeout(openUserPopup, 700);
+            leafletMap.flyTo([lat, lng], 14, { duration: 0.65 });
+          }
+        },
+        err => {
+          setLocateButtonLoading(false);
+          const msg = err && err.code === 1
+            ? "Izin akses lokasi ditolak. Aktifkan izin lokasi di browser Anda."
+            : err && err.code === 3
+              ? "Waktu pencarian lokasi habis. Silakan coba lagi."
+              : "Lokasi tidak dapat dideteksi saat ini.";
+          setMapLocationStatus(msg, "error");
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      );
+    }
+
+    function focusGuideOnMap(guideId, opts = {}) {
+      const g = TOUR_GUIDES.find(x => x.id === guideId);
+      if (!g) return;
+      state.selectedMapGuideId = guideId;
+      renderMap({ preserveListScroll: true });
+
+      if (!opts.skipFly && leafletMap) {
+        const targetZoom = Math.max(leafletMap.getZoom(), 15);
+        const targetLatLng = L.latLng(g.lat, g.lng);
+        const needsMove = leafletMap.getCenter().distanceTo(targetLatLng) > 10 || leafletMap.getZoom() < targetZoom;
+        let opened = false;
+        const openSelectedPopup = () => {
+          if (opened) return;
+          opened = true;
+          if (state.selectedMapGuideId === guideId && guideMarkersById[guideId]) {
+            guideMarkersById[guideId].openPopup();
+          }
+        };
+        if (needsMove) {
+          leafletMap.once("moveend", openSelectedPopup);
+          setTimeout(openSelectedPopup, 650);
+          leafletMap.flyTo(targetLatLng, targetZoom, { duration: 0.55 });
+        } else {
+          openSelectedPopup();
+        }
+      }
+    }
+
     function initOrUpdateMap() {
       if (!leafletMap) {
         leafletMap = L.map("medanLeafletMap").setView([state.refLat, state.refLng], 12);
         L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", { maxZoom: 18 }).addTo(leafletMap);
         leafletMarkersLayer = L.layerGroup().addTo(leafletMap);
+
+        const LocateControl = L.Control.extend({
+          options: { position: "topright" },
+          onAdd: () => {
+            const container = L.DomUtil.create("div", "leaflet-control leaflet-control-locate");
+            const btn = L.DomUtil.create("button", "leaflet-control-locate-btn", container);
+            btn.type = "button";
+            btn.id = "btnMapMyLocation";
+            btn.title = "Fokus ke Lokasi Saya";
+            btn.setAttribute("aria-label", "Fokus ke Lokasi Saya");
+            btn.innerHTML = LOCATE_BTN_IDLE_HTML;
+            L.DomEvent.disableClickPropagation(container);
+            L.DomEvent.disableScrollPropagation(container);
+            btn.addEventListener("click", e => {
+              e.preventDefault();
+              e.stopPropagation();
+              locateUserOnMap();
+            });
+            return container;
+          }
+        });
+        new LocateControl().addTo(leafletMap);
+
+        document.getElementById("medanLeafletMap").addEventListener("click", e => {
+          const detailBtn = e.target.closest("[data-map-detail]");
+          if (detailBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            openGuideModal(detailBtn.dataset.mapDetail);
+          }
+        });
+
         leafletMap.on("click", e => {
           state.refLat = Number(e.latlng.lat.toFixed(4));
           state.refLng = Number(e.latlng.lng.toFixed(4));
           state.refLabel = `Titik Peta (${state.refLat}, ${state.refLng})`;
+          setMapLocationStatus("");
           document.querySelectorAll(".landmark-btn").forEach(btn => {
             btn.className = "landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition";
           });
@@ -795,19 +986,52 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       setTimeout(() => { leafletMap.invalidateSize(); renderMap(); }, 150);
     }
 
-    function renderMap() {
+    function renderMap(opts = {}) {
       if (!leafletMap) return;
+      const listEl = document.getElementById("nearestGuidesList");
+      const prevScroll = opts.preserveListScroll && listEl ? listEl.scrollTop : 0;
+
       leafletMarkersLayer.clearLayers();
+      guideMarkersById = {};
+      userLocationMarker = null;
       document.getElementById("activeRefLabel").textContent = state.refLabel;
+
+      const locBtn = document.getElementById("btnMapMyLocation");
+      if (locBtn && !locBtn.disabled) {
+        locBtn.classList.toggle("is-active", state.refLabel === "Lokasi Saya" && state.userLat !== null);
+      }
+
       const onlyAvail = document.getElementById("chkMapOnlyAvailable").checked;
 
-      L.circleMarker([state.refLat, state.refLng], {
-        radius: 9,
-        fillColor: "#f59e0b",
-        color: "#14242b",
-        weight: 2.5,
-        fillOpacity: 1
-      }).bindPopup(`<strong>Titik Jemput Aktif</strong><br/>${escapeHtml(state.refLabel)}`).addTo(leafletMarkersLayer);
+      if (state.userLat !== null && state.userLng !== null) {
+        L.circleMarker([state.userLat, state.userLng], {
+          radius: 16,
+          fillColor: "#2563eb",
+          color: "#2563eb",
+          weight: 1,
+          opacity: 0.35,
+          fillOpacity: 0.16,
+          interactive: false
+        }).addTo(leafletMarkersLayer);
+
+        userLocationMarker = L.circleMarker([state.userLat, state.userLng], {
+          radius: 8,
+          fillColor: "#2563eb",
+          color: "#ffffff",
+          weight: 3,
+          fillOpacity: 1
+        }).bindPopup(`<strong>Lokasi Saya Saat Ini</strong><br/><span class="text-[11px] text-muted">${state.userLat}, ${state.userLng}</span>`).addTo(leafletMarkersLayer);
+      }
+
+      if (!(state.refLabel === "Lokasi Saya" && state.userLat !== null && state.userLng !== null)) {
+        L.circleMarker([state.refLat, state.refLng], {
+          radius: 9,
+          fillColor: "#f59e0b",
+          color: "#14242b",
+          weight: 2.5,
+          fillOpacity: 1
+        }).bindPopup(`<strong>Titik Jemput Aktif</strong><br/>${escapeHtml(state.refLabel)}`).addTo(leafletMarkersLayer);
+      }
 
       const ranked = TOUR_GUIDES
         .filter(g => !onlyAvail || g.status === "Tersedia")
@@ -815,29 +1039,83 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         .sort((a, b) => a.d - b.d);
 
       ranked.forEach(g => {
-        L.circleMarker([g.lat, g.lng], {
-          radius: 7,
+        const isSelected = state.selectedMapGuideId === g.id;
+        if (isSelected) {
+          L.circleMarker([g.lat, g.lng], {
+            radius: 16,
+            fillColor: "#07779d",
+            color: "#07779d",
+            weight: 1.5,
+            opacity: 0.5,
+            fillOpacity: 0.18,
+            interactive: false
+          }).addTo(leafletMarkersLayer);
+        }
+
+        const marker = L.circleMarker([g.lat, g.lng], {
+          radius: isSelected ? 10 : 7,
           fillColor: g.status === "Tersedia" ? "#07779d" : "#e11d48",
-          color: "#fff",
-          weight: 2,
-          fillOpacity: 0.9
-        }).bindPopup(`<strong>${escapeHtml(g.name)}</strong> (${escapeHtml(g.id)})<br/>${g.d.toFixed(2)} km • ${formatIdr(g.price)}<br/><span style="color:#07779d">${escapeHtml(g.status)}</span>`).addTo(leafletMarkersLayer);
+          color: isSelected ? "#14242b" : "#ffffff",
+          weight: isSelected ? 3 : 2,
+          fillOpacity: isSelected ? 1 : 0.9
+        }).bindPopup(buildGuidePopupHtml(g), { maxWidth: 290, autoPan: true }).addTo(leafletMarkersLayer);
+
+        marker.on("click", () => {
+          if (state.selectedMapGuideId !== g.id) {
+            state.selectedMapGuideId = g.id;
+            renderMap({ preserveListScroll: true });
+            const focusedMarker = guideMarkersById[g.id];
+            if (focusedMarker) focusedMarker.openPopup();
+            const cardEl = listEl?.querySelector(`[data-map-guide="${CSS.escape(g.id)}"]`);
+            if (cardEl) cardEl.scrollIntoView({ block: "nearest", behavior: "smooth" });
+          }
+        });
+
+        if (isSelected) marker.bringToFront();
+        guideMarkersById[g.id] = marker;
       });
 
-      document.getElementById("nearestGuidesList").innerHTML = ranked.length
-        ? ranked.slice(0, 12).map((g, i) => `<div class="py-2 flex justify-between gap-2 text-xs">
-            <div class="min-w-0">
-              <strong class="text-ink block truncate">#${i + 1} ${escapeHtml(g.name)}</strong>
-              <div class="text-[11px] text-muted truncate">${escapeHtml(formatDistrict(g.district))} • ${escapeHtml(g.status)}</div>
-            </div>
-            <div class="text-right shrink-0">
-              <span class="font-mono font-bold text-lokale block">${g.d.toFixed(2)} km</span>
-              <button type="button" data-map-open="${escapeHtml(g.id)}" class="text-[10px] text-lokale underline">Pilih</button>
-            </div>
-          </div>`).join("")
+      listEl.innerHTML = ranked.length
+        ? ranked.slice(0, 12).map((g, i) => {
+            const isSelected = state.selectedMapGuideId === g.id;
+            return `<div role="button" tabindex="0" data-map-guide="${escapeHtml(g.id)}" class="py-2.5 px-2.5 my-1 rounded-xl flex items-center justify-between gap-2.5 text-xs cursor-pointer transition border ${isSelected ? 'bg-white border-lokale shadow-sm ring-1 ring-lokale/30' : 'border-transparent hover:bg-white/80 hover:border-lokaleborder'}">
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-1.5">
+                  <strong class="text-ink truncate">#${i + 1} ${escapeHtml(g.name)}</strong>
+                </div>
+                <div class="text-[11px] text-muted truncate mt-0.5">${escapeHtml(formatDistrict(g.district))} • ${escapeHtml(g.status)}</div>
+                <div class="text-[11px] text-lokale font-medium truncate mt-0.5">★ ${Number(g.rating).toFixed(1)} • ${formatIdr(g.price)}/hr</div>
+              </div>
+              <div class="flex flex-col items-end gap-1.5 shrink-0">
+                <span class="font-mono font-bold text-lokale text-[11px]">${g.d.toFixed(2)} km</span>
+                <button type="button" data-map-select="${escapeHtml(g.id)}" class="px-3.5 py-1.5 min-h-[30px] rounded-full bg-lokale hover:bg-lokaledark active:scale-95 text-white text-[11px] font-semibold shadow-sm transition cursor-pointer">Pilih</button>
+              </div>
+            </div>`;
+          }).join("")
         : `<p class="text-xs text-muted py-6 text-center">Tidak ada pemandu yang sesuai filter.</p>`;
 
-      document.querySelectorAll("[data-map-open]").forEach(b => b.addEventListener("click", () => openGuideModal(b.dataset.mapOpen)));
+      if (opts.preserveListScroll) {
+        listEl.scrollTop = prevScroll;
+      }
+
+      listEl.querySelectorAll("[data-map-guide]").forEach(item => {
+        item.addEventListener("click", () => focusGuideOnMap(item.dataset.mapGuide));
+        item.addEventListener("keydown", e => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            focusGuideOnMap(item.dataset.mapGuide);
+          }
+        });
+      });
+
+      listEl.querySelectorAll("[data-map-select]").forEach(btn => {
+        btn.addEventListener("click", e => {
+          e.stopPropagation();
+          const id = btn.dataset.mapSelect;
+          focusGuideOnMap(id, { skipFly: true });
+          openGuideModal(id);
+        });
+      });
     }
 
     function updatePlanner() {
@@ -1046,11 +1324,13 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         state.refLat = parseFloat(p[0]);
         state.refLng = parseFloat(p[1]);
         state.refLabel = p.slice(2).join(",");
+        state.selectedMapGuideId = null;
+        setMapLocationStatus("");
         if (leafletMap) leafletMap.setView([state.refLat, state.refLng], 12);
         renderMap();
       }));
 
-      document.getElementById("chkMapOnlyAvailable").addEventListener("change", renderMap);
+      document.getElementById("chkMapOnlyAvailable").addEventListener("change", () => renderMap());
       ["planGuideSelect", "planDays", "planPax", "planHotelTier", "planTransportMode"].forEach(id => document.getElementById(id).addEventListener("change", updatePlanner));
       document.getElementById("btnBookFromPlanner").addEventListener("click", () => openGuideModal(document.getElementById("planGuideSelect").value));
       document.querySelectorAll(".eco-tab-btn").forEach(b => b.addEventListener("click", () => { state.ecoTab = b.dataset.ecoTab; renderEco(); }));
@@ -1086,6 +1366,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           fb.textContent = data.message || `Booking berhasil untuk ${traveler} bersama ${g.name} (${days} hari). Status diperbarui menjadi Booked.`;
           fb.classList.remove("hidden");
           renderDirectory();
+          if (state.activeTab === "map") renderMap({ preserveListScroll: true });
         } catch (err) {
           fb.className = "p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 font-medium";
           fb.textContent = err.message || "Terjadi kesalahan saat menyimpan booking.";
