@@ -114,8 +114,75 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides ??
         </div>
       </div>
     </div>
+
+    <!-- Konfirmasi Pendaftar, Kontak Pemesanan & Booking (API v1) -->
+    <section class="bg-white rounded-3xl border border-lokaleborder p-6 shadow-sm space-y-4 text-xs">
+      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div>
+          <span class="text-[10px] font-bold uppercase tracking-wider text-amber-700">Verifikasi &amp; Konfirmasi Admin Web (REST API v1)</span>
+          <h2 class="font-display font-extrabold text-xl text-ink mt-0.5">Konfirmasi Pendaftar, Kontak &amp; Booking</h2>
+        </div>
+        <div id="v1AdminSessionBadge" class="hidden flex-wrap items-center gap-2"></div>
+      </div>
+
+      <!-- Form Login Admin API v1 (Tanpa pilihan role; role diverifikasi dari tabel users PostgreSQL) -->
+      <div id="v1AdminLoginBox" class="rounded-2xl bg-lokalesoft/50 border border-lokaleborder p-4 space-y-3">
+        <p class="text-xs text-ink font-semibold">Masuk sebagai Admin untuk memverifikasi nomor HP pendaftar, kontak pemesan, dan status reservasi via API v1:</p>
+        <form id="v1AdminLoginForm" class="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
+          <div>
+            <label for="v1AdminEmail" class="block text-[11px] font-semibold text-muted mb-1">Email Admin</label>
+            <input id="v1AdminEmail" type="email" required placeholder="admin@sumutgo.id" class="w-full bg-white border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:border-lokale" />
+          </div>
+          <div>
+            <label for="v1AdminPassword" class="block text-[11px] font-semibold text-muted mb-1">Password</label>
+            <input id="v1AdminPassword" type="password" required placeholder="Masukkan password" class="w-full bg-white border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink focus:outline-none focus:border-lokale" />
+          </div>
+          <div>
+            <button id="btnV1AdminLoginSubmit" type="submit" class="w-full py-2.5 px-4 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold text-xs transition shadow-sm">Masuk Panel Admin v1</button>
+          </div>
+        </form>
+        <div id="v1AdminLoginError" class="hidden p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-semibold"></div>
+      </div>
+
+      <!-- Panel Aktif Admin -->
+      <div id="v1AdminWorkspace" class="hidden space-y-4">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+          <div class="flex flex-wrap gap-1.5 bg-lokalesoft p-1 rounded-full">
+            <button type="button" data-v1-admin-tab="users" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-lokale text-white transition">Verifikasi Pendaftar &amp; HP</button>
+            <button type="button" data-v1-admin-tab="contacts" class="px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition">Kontak &amp; Pesan Booking</button>
+            <button type="button" data-v1-admin-tab="bookings" class="px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition">Konfirmasi Booking</button>
+          </div>
+          <span id="v1AdminSummary" class="text-[11px] font-semibold text-muted">Memuat data...</span>
+        </div>
+
+        <div class="flex flex-wrap items-center gap-2">
+          <select id="v1AdminStatusFilter" class="bg-lokalesoft/50 border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink font-semibold">
+            <option value="ALL">Semua Status</option>
+          </select>
+          <input id="v1AdminSearch" type="search" placeholder="Cari nama, kode booking, email, atau nomor HP..." class="flex-1 min-w-[220px] bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2 text-xs text-ink focus:outline-none" />
+          <button id="btnV1AdminRefresh" type="button" class="px-3.5 py-2 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white font-semibold text-xs transition">Muat Ulang</button>
+        </div>
+
+        <div id="v1AdminFeedback" class="hidden p-3 rounded-2xl text-xs font-medium"></div>
+        <div id="v1AdminList" class="space-y-3"></div>
+      </div>
+    </section>
   </main>
 
+<?php
+  $scriptDir = rtrim(str_replace('\\', '/', dirname($_SERVER['SCRIPT_NAME'] ?? '/index.php')), '/');
+  if ($scriptDir === '/') {
+      $scriptDir = '';
+  }
+  $apiV1PathPrefix = $scriptDir . '/index.php/api/v1';
+?>
+  <script>
+    window.SUMUTGO_CONFIG = {
+      apiV1BaseUrl: <?= json_encode($apiV1PathPrefix) ?>,
+      siteUrl: <?= json_encode($scriptDir !== '' ? $scriptDir : '/') ?>
+    };
+  </script>
+  <script src="<?= esc($scriptDir . '/assets/js/api.js') ?>?v=<?= filemtime(FCPATH . 'assets/js/api.js') ?>"></script>
   <script>
     const TOUR_GUIDES = <?= json_encode($guides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
     const API_BASE_URL = '<?= rtrim(site_url('api/tour-guides'), '/') ?>';
@@ -189,10 +256,366 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides ??
       }
     }
 
+    // =========================================================================
+    // PANEL KONFIRMASI ADMIN API v1 (USERS, BOOKING CONTACTS & BOOKINGS)
+    // =========================================================================
+    const v1State = {
+      user: null,
+      tab: "users",
+      statusFilter: "ALL",
+      q: ""
+    };
+
+    const formatPhone = raw => {
+      const d = String(raw || "").replace(/[^0-9]/g, "");
+      if (!d) return "-";
+      return "+" + (d.startsWith("0") ? "62" + d.slice(1) : d);
+    };
+
+    const formatIdr = v => "Rp " + Number(v || 0).toLocaleString("id-ID");
+
+    function setV1Feedback(msg, isError = false) {
+      const el = document.getElementById("v1AdminFeedback");
+      if (!el) return;
+      if (!msg) {
+        el.classList.add("hidden");
+        el.textContent = "";
+        return;
+      }
+      el.className = isError
+        ? "p-3 rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium"
+        : "p-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-medium";
+      el.textContent = msg;
+      el.classList.remove("hidden");
+    }
+
+    function populateV1StatusFilter(tab) {
+      const sel = document.getElementById("v1AdminStatusFilter");
+      if (!sel) return;
+      const options = tab === "users"
+        ? [["ALL", "Semua Pendaftar"], ["false", "Belum Terkonfirmasi"], ["true", "Sudah Terkonfirmasi"]]
+        : tab === "contacts"
+          ? [["ALL", "Semua Kontak"], ["unverified", "Belum Diverifikasi"], ["contacted", "Sedang Dihubungi"], ["confirmed", "Terkonfirmasi"]]
+          : [["ALL", "Semua Booking"], ["pending", "Pending"], ["confirmed", "Confirmed"], ["ongoing", "Ongoing"], ["completed", "Completed"], ["cancelled", "Cancelled"]];
+      sel.innerHTML = options.map(([val, lbl]) => `<option value="${val}">${lbl}</option>`).join("");
+      v1State.statusFilter = "ALL";
+    }
+
+    function updateV1AuthUi() {
+      const loginBox = document.getElementById("v1AdminLoginBox");
+      const workspace = document.getElementById("v1AdminWorkspace");
+      const badgeBox = document.getElementById("v1AdminSessionBadge");
+      const isAdmin = v1State.user && String(v1State.user.role || "").toLowerCase() === "admin";
+
+      loginBox.classList.toggle("hidden", Boolean(isAdmin));
+      workspace.classList.toggle("hidden", !isAdmin);
+
+      if (isAdmin) {
+        badgeBox.innerHTML = `
+          <span class="px-3 py-1 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[11px] font-bold">
+            ✓ Admin: ${escapeHtml(v1State.user.full_name)} (${escapeHtml(formatPhone(v1State.user.phone_number))})
+          </span>
+          <button id="btnV1AdminLogout" type="button" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 text-[11px] font-semibold transition">Keluar Admin</button>`;
+        badgeBox.classList.remove("hidden");
+        badgeBox.classList.add("flex");
+        document.getElementById("btnV1AdminLogout")?.addEventListener("click", async () => {
+          try { await window.SumutGoApi.auth.logout(); } catch (_) {}
+          window.SumutGoApi.clearSessionStorage();
+          v1State.user = null;
+          updateV1AuthUi();
+        });
+      } else {
+        badgeBox.innerHTML = "";
+        badgeBox.classList.add("hidden");
+        badgeBox.classList.remove("flex");
+      }
+    }
+
+    async function initV1AdminSession() {
+      const token = window.SumutGoApi?.getToken();
+      if (!token) {
+        v1State.user = null;
+        updateV1AuthUi();
+        return;
+      }
+      try {
+        const me = await window.SumutGoApi.auth.me();
+        if (me?.data && String(me.data.role || "").toLowerCase() === "admin") {
+          v1State.user = me.data;
+          window.SumutGoApi.setStoredUser(me.data);
+          updateV1AuthUi();
+          populateV1StatusFilter(v1State.tab);
+          await loadV1AdminData();
+        } else {
+          v1State.user = null;
+          updateV1AuthUi();
+        }
+      } catch (_) {
+        v1State.user = null;
+        updateV1AuthUi();
+      }
+    }
+
+    function switchV1AdminTab(tab) {
+      v1State.tab = tab;
+      document.querySelectorAll("[data-v1-admin-tab]").forEach(btn => {
+        btn.className = btn.dataset.v1AdminTab === tab
+          ? "px-3.5 py-1.5 rounded-full text-xs font-bold bg-lokale text-white transition"
+          : "px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition";
+      });
+      populateV1StatusFilter(tab);
+      setV1Feedback("");
+      loadV1AdminData();
+    }
+
+    async function loadV1AdminData() {
+      const listEl = document.getElementById("v1AdminList");
+      const summaryEl = document.getElementById("v1AdminSummary");
+      if (!listEl || !v1State.user) return;
+
+      listEl.innerHTML = `<div class="py-8 text-center text-muted">Memuat data ${escapeHtml(v1State.tab)} dari PostgreSQL Supabase...</div>`;
+
+      try {
+        const q = (document.getElementById("v1AdminSearch")?.value || "").trim();
+        const f = v1State.statusFilter;
+
+        if (v1State.tab === "users") {
+          const resp = await window.SumutGoApi.users.list({
+            page: 1,
+            per_page: 50,
+            is_verified: f !== "ALL" ? f : "",
+            q
+          });
+          const rows = Array.isArray(resp?.data) ? resp.data : [];
+          if (summaryEl) summaryEl.textContent = `${rows.length} pengguna ditampilkan`;
+          if (!rows.length) {
+            listEl.innerHTML = `<div class="py-8 text-center bg-lokalesoft/30 rounded-2xl text-muted">Tidak ada pendaftar sesuai filter.</div>`;
+            return;
+          }
+          listEl.innerHTML = rows.map(u => {
+            const digits = String(u.phone_number || "").replace(/[^0-9]/g, "");
+            const badge = u.is_verified
+              ? `<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">✓ Terkonfirmasi</span>`
+              : `<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">⏳ Belum Verifikasi</span>`;
+            const nextVal = u.is_verified ? "false" : "true";
+            const btnLabel = u.is_verified ? "Batalkan Verifikasi" : "Konfirmasi Pendaftar & HP";
+            const btnCls = u.is_verified
+              ? "bg-slate-100 hover:bg-slate-200 text-ink"
+              : "bg-emerald-600 hover:bg-emerald-700 text-white";
+            return `<div class="border border-lokaleborder rounded-2xl p-4 space-y-2 bg-white">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <strong class="text-sm text-ink">${escapeHtml(u.full_name)}</strong>
+                  <span class="px-2 py-0.5 rounded-full bg-lokalesoft text-lokale text-[10px] font-bold uppercase">${escapeHtml(u.role)}</span>
+                  ${badge}
+                </div>
+                <span class="font-mono text-[11px] text-muted">ID #${escapeHtml(u.user_id)} • ${escapeHtml(u.booking_count || 0)} booking</span>
+              </div>
+              <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                <div>Email: <strong class="text-ink">${escapeHtml(u.email)}</strong> • HP: <strong class="font-mono text-lokale">${escapeHtml(formatPhone(digits))}</strong></div>
+                <div class="flex flex-wrap items-center gap-1.5">
+                  ${digits ? `<a href="https://wa.me/${digits}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold">Chat WA</a>` : ""}
+                </div>
+              </div>
+              ${u.verification_note ? `<div class="text-[11px] text-muted bg-lokalesoft/50 rounded-xl px-3 py-1.5">Catatan: ${escapeHtml(u.verification_note)}</div>` : ""}
+              <div class="flex flex-wrap items-center gap-2 pt-1">
+                <input type="text" data-v1-user-note="${u.user_id}" value="${escapeHtml(u.verification_note || "")}" placeholder="Catatan verifikasi admin (opsional)..." class="flex-1 min-w-[200px] bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-1.5 text-xs" />
+                <button type="button" data-v1-verify-user="${u.user_id}" data-next-verified="${nextVal}" class="px-3.5 py-1.5 rounded-full ${btnCls} text-[11px] font-semibold transition">${btnLabel}</button>
+              </div>
+            </div>`;
+          }).join("");
+
+          listEl.querySelectorAll("[data-v1-verify-user]").forEach(btn => btn.addEventListener("click", async () => {
+            const userId = Number(btn.dataset.v1VerifyUser);
+            const isVerified = btn.dataset.nextVerified === "true";
+            const note = listEl.querySelector(`[data-v1-user-note="${userId}"]`)?.value || "";
+            btn.disabled = true;
+            try {
+              const r = await window.SumutGoApi.users.verify(userId, { is_verified: isVerified, verification_note: note });
+              setV1Feedback(r.message || "Status pendaftar diperbarui.", false);
+              await loadV1AdminData();
+            } catch (err) {
+              setV1Feedback(err.message || "Gagal memperbarui status pendaftar.", true);
+              btn.disabled = false;
+            }
+          }));
+        } else if (v1State.tab === "contacts") {
+          const resp = await window.SumutGoApi.bookingContacts.list({
+            page: 1,
+            per_page: 50,
+            confirmation_status: f !== "ALL" ? f : "",
+            q
+          });
+          const rows = Array.isArray(resp?.data) ? resp.data : [];
+          if (summaryEl) summaryEl.textContent = `${rows.length} kontak booking ditampilkan`;
+          if (!rows.length) {
+            listEl.innerHTML = `<div class="py-8 text-center bg-lokalesoft/30 rounded-2xl text-muted">Belum ada pesan/kontak sesuai filter.</div>`;
+            return;
+          }
+          listEl.innerHTML = rows.map(c => {
+            const digits = String(c.contact_phone || "").replace(/[^0-9]/g, "");
+            const statusCls = c.confirmation_status === "confirmed"
+              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+              : c.confirmation_status === "contacted"
+                ? "bg-amber-50 text-amber-800 border-amber-200"
+                : "bg-slate-100 text-slate-600 border-slate-200";
+            return `<div class="border border-lokaleborder rounded-2xl p-4 space-y-2 bg-white">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="font-mono font-bold text-lokale bg-lokalesoft px-2.5 py-0.5 rounded-full">${escapeHtml(c.booking_code)}</span>
+                  <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${statusCls}">${escapeHtml(c.confirmation_status)}</span>
+                  <span class="text-[10px] font-semibold uppercase text-muted">${escapeHtml(c.sender_role)} via ${escapeHtml(c.preferred_channel)}</span>
+                </div>
+                <span class="font-mono text-[11px] text-muted">Kontak #${escapeHtml(c.contact_id)}</span>
+              </div>
+              <div class="text-[11px] text-muted">Pemesan: <strong class="text-ink">${escapeHtml(c.tourist_name)}</strong> (${escapeHtml(formatPhone(c.tourist_phone))}) ↔ Pemandu: <strong class="text-ink">${escapeHtml(c.guide_name)}</strong> (${escapeHtml(formatPhone(c.guide_phone))})</div>
+              <div class="p-2.5 rounded-xl bg-lokalesoft/40 border border-lokaleborder text-xs text-ink">${escapeHtml(c.inquiry_message)}</div>
+              <div class="flex flex-wrap items-center gap-2 pt-1">
+                ${digits ? `<a href="https://wa.me/${digits}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold text-[11px]">WA Pengirim</a>` : ""}
+                <input type="text" data-v1-contact-note="${c.contact_id}" value="${escapeHtml(c.admin_note || "")}" placeholder="Catatan tindak lanjut admin..." class="flex-1 min-w-[180px] bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-1.5 text-xs" />
+                <button type="button" data-v1-confirm-contact="${c.contact_id}" data-next-status="contacted" class="px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 text-[11px] font-semibold transition">Tandai Dihubungi</button>
+                <button type="button" data-v1-confirm-contact="${c.contact_id}" data-next-status="confirmed" class="px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition">Konfirmasi</button>
+              </div>
+            </div>`;
+          }).join("");
+
+          listEl.querySelectorAll("[data-v1-confirm-contact]").forEach(btn => btn.addEventListener("click", async () => {
+            const contactId = Number(btn.dataset.v1ConfirmContact);
+            const nextStatus = btn.dataset.nextStatus;
+            const note = listEl.querySelector(`[data-v1-contact-note="${contactId}"]`)?.value || "";
+            btn.disabled = true;
+            try {
+              const r = await window.SumutGoApi.bookingContacts.confirm(contactId, { confirmation_status: nextStatus, admin_note: note });
+              setV1Feedback(r.message || "Status kontak diperbarui.", false);
+              await loadV1AdminData();
+            } catch (err) {
+              setV1Feedback(err.message || "Gagal memperbarui kontak.", true);
+              btn.disabled = false;
+            }
+          }));
+        } else {
+          const resp = await window.SumutGoApi.bookings.list({
+            page: 1,
+            per_page: 50,
+            status: f !== "ALL" ? f : ""
+          });
+          let rows = Array.isArray(resp?.data) ? resp.data : [];
+          if (q) {
+            const ql = q.toLowerCase();
+            rows = rows.filter(b => `${b.booking_code} ${b.tourist_name} ${b.guide_name} ${b.tourist_phone || ""} ${b.guide_phone || ""}`.toLowerCase().includes(ql));
+          }
+          if (summaryEl) summaryEl.textContent = `${rows.length} booking ditampilkan`;
+          if (!rows.length) {
+            listEl.innerHTML = `<div class="py-8 text-center bg-lokalesoft/30 rounded-2xl text-muted">Tidak ada booking sesuai filter.</div>`;
+            return;
+          }
+          listEl.innerHTML = rows.map(b => {
+            let btns = "";
+            if (b.status === "pending") {
+              btns += `<button type="button" data-v1-booking-status="${b.booking_id}" data-version="${b.version}" data-next="confirmed" class="px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white font-semibold">Konfirmasi Booking</button>`;
+              btns += `<button type="button" data-v1-booking-status="${b.booking_id}" data-version="${b.version}" data-next="cancelled" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 font-semibold">Batalkan</button>`;
+            } else if (b.status === "confirmed") {
+              btns += `<button type="button" data-v1-booking-status="${b.booking_id}" data-version="${b.version}" data-next="ongoing" class="px-3 py-1 rounded-full bg-indigo-600 text-white font-semibold">Mulai Tur</button>`;
+              btns += `<button type="button" data-v1-booking-status="${b.booking_id}" data-version="${b.version}" data-next="cancelled" class="px-3 py-1 rounded-full bg-rose-50 text-rose-600 border border-rose-200 font-semibold">Batalkan</button>`;
+            } else if (b.status === "ongoing") {
+              btns += `<button type="button" data-v1-booking-status="${b.booking_id}" data-version="${b.version}" data-next="completed" class="px-3 py-1 rounded-full bg-emerald-600 text-white font-semibold">Selesaikan Tur</button>`;
+            }
+            return `<div class="border border-lokaleborder rounded-2xl p-4 space-y-2 bg-white">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <div class="flex items-center gap-2">
+                  <span class="font-mono font-bold text-lokale bg-lokalesoft px-2.5 py-0.5 rounded-full">${escapeHtml(b.booking_code)}</span>
+                  <span class="px-2 py-0.5 rounded-full bg-slate-100 text-ink text-[10px] font-bold uppercase">${escapeHtml(b.status)}</span>
+                  <span class="text-[10px] font-mono text-muted">v${escapeHtml(b.version)}</span>
+                </div>
+                <strong class="font-mono text-lokale">${formatIdr(b.total_price_idr)}</strong>
+              </div>
+              <div class="text-[11px] text-muted">Pemesan: <strong class="text-ink">${escapeHtml(b.tourist_name)}</strong> (${escapeHtml(formatPhone(b.tourist_phone))}) • Pemandu: <strong class="text-ink">${escapeHtml(b.guide_name)}</strong> (${escapeHtml(formatPhone(b.guide_phone))})</div>
+              <div class="text-[11px] text-ink">${escapeHtml(b.start_date)} s.d. ${escapeHtml(b.end_date)} (${escapeHtml(b.duration_days)} Hari • ${escapeHtml(b.number_of_guests)} Tamu)</div>
+              ${btns ? `<div class="flex flex-wrap justify-end gap-2 pt-1">${btns}</div>` : ""}
+            </div>`;
+          }).join("");
+
+          listEl.querySelectorAll("[data-v1-booking-status]").forEach(btn => btn.addEventListener("click", async () => {
+            const bookingId = Number(btn.dataset.v1BookingStatus);
+            const version = Number(btn.dataset.version);
+            const nextStatus = btn.dataset.next;
+            let cancelReason = undefined;
+            if (nextStatus === "cancelled") {
+              const promptRes = window.prompt("Alasan pembatalan (opsional):", "Dibatalkan oleh Admin");
+              if (promptRes === null) return;
+              cancelReason = promptRes.trim() || "Dibatalkan oleh Admin";
+            }
+            btn.disabled = true;
+            try {
+              const payload = { status: nextStatus, version };
+              if (cancelReason !== undefined) payload.cancel_reason = cancelReason;
+              const r = await window.SumutGoApi.bookings.updateStatus(bookingId, payload);
+              setV1Feedback(r.message || `Booking diperbarui menjadi ${nextStatus}.`, false);
+              await loadV1AdminData();
+            } catch (err) {
+              setV1Feedback(err.message || "Gagal memperbarui booking.", true);
+              btn.disabled = false;
+            }
+          }));
+        }
+      } catch (err) {
+        listEl.innerHTML = `<div class="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700">${escapeHtml(err.message || "Gagal memuat data.")}</div>`;
+      }
+    }
+
     window.addEventListener("DOMContentLoaded", () => {
       renderAdminLedger();
       fetchApiTest("list");
       document.querySelectorAll(".api-test-btn").forEach(b => b.addEventListener("click", () => fetchApiTest(b.dataset.apiTest)));
+
+      document.getElementById("v1AdminLoginForm")?.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const email = (document.getElementById("v1AdminEmail")?.value || "").trim().toLowerCase();
+        const password = document.getElementById("v1AdminPassword")?.value || "";
+        const errEl = document.getElementById("v1AdminLoginError");
+        const submitBtn = document.getElementById("btnV1AdminLoginSubmit");
+        if (errEl) errEl.classList.add("hidden");
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Memverifikasi...";
+        }
+        try {
+          const resp = await window.SumutGoApi.auth.login({ email, password });
+          const user = resp?.data?.user;
+          const token = resp?.data?.token;
+          if (!token || !user || String(user.role || "").toLowerCase() !== "admin") {
+            throw new Error("Akun ini bukan role admin atau gagal autentikasi.");
+          }
+          window.SumutGoApi.setToken(token);
+          window.SumutGoApi.setStoredUser(user);
+          v1State.user = user;
+          updateV1AuthUi();
+          populateV1StatusFilter(v1State.tab);
+          await loadV1AdminData();
+        } catch (err) {
+          if (errEl) {
+            errEl.textContent = err.message || "Gagal login sebagai Admin.";
+            errEl.classList.remove("hidden");
+          }
+        } finally {
+          if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = "Masuk Panel Admin v1";
+          }
+        }
+      });
+
+      document.querySelectorAll("[data-v1-admin-tab]").forEach(b => {
+        b.addEventListener("click", () => switchV1AdminTab(b.dataset.v1AdminTab));
+      });
+      document.getElementById("v1AdminStatusFilter")?.addEventListener("change", (e) => {
+        v1State.statusFilter = e.target.value || "ALL";
+        loadV1AdminData();
+      });
+      document.getElementById("btnV1AdminRefresh")?.addEventListener("click", () => loadV1AdminData());
+      document.getElementById("v1AdminSearch")?.addEventListener("input", () => loadV1AdminData());
+
+      initV1AdminSession();
     });
   </script>
 </body>

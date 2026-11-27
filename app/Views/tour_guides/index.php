@@ -130,6 +130,12 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
               <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
               <span id="btnOpenMyBookingsText" class="hidden md:inline">Booking Saya</span>
             </button>
+            <button id="btnOpenAdminConfirm" type="button" class="hidden px-3 py-2 rounded-full bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 text-xs font-semibold transition">
+              <span class="inline-flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24"><path d="M9 12l2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+                <span class="hidden md:inline">Konfirmasi Admin</span>
+              </span>
+            </button>
             <a id="navAdminQuickLink" href="<?= site_url('admin') ?>" class="hidden px-3 py-2 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 text-xs font-semibold transition">Portal Admin</a>
             <div class="flex items-center gap-2 bg-white border border-lokaleborder rounded-full pl-1.5 pr-1.5 py-1 shadow-sm">
               <span id="navUserAvatar" class="w-6 h-6 rounded-full bg-lokale text-white text-[10px] font-bold flex items-center justify-center shrink-0">U</span>
@@ -608,9 +614,17 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                   <span class="text-[10px] text-lokale font-bold uppercase tracking-wide block">Kontak Pemandu</span>
                   <div id="modalPhone" class="font-mono font-bold text-sm text-ink mt-0.5">-</div>
                 </div>
-                <a id="modalWhatsappLink" href="#" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 text-[11px] font-semibold transition">
-                  <span>Chat WhatsApp</span>
-                </a>
+                <div class="flex flex-wrap items-center sm:justify-end gap-1.5">
+                  <a id="modalWhatsappLink" href="#" target="_blank" rel="noopener noreferrer" class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 text-[11px] font-semibold transition">
+                    <span>Chat WhatsApp</span>
+                  </a>
+                  <a id="modalCallLink" href="#" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[11px] font-semibold transition">
+                    <span>Telepon</span>
+                  </a>
+                  <button id="btnModalCopyPhone" type="button" class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-white hover:bg-slate-100 text-ink border border-slate-200 text-[11px] font-semibold transition">
+                    <span>Salin HP</span>
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -818,7 +832,47 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                 <div><span class="text-muted block">Durasi Resmi</span><strong id="recDurationDays" class="text-lokale">-</strong></div>
                 <div><span class="text-muted block">Rentang Tanggal</span><strong id="recDateRange" class="text-ink">-</strong></div>
                 <div><span class="text-muted block">Tamu &amp; Titik Kumpul</span><strong id="recGuests" class="text-ink">-</strong> • <span id="recMeetingPoint" class="text-muted">-</span></div>
+                <div class="sm:col-span-2 pt-2 border-t border-emerald-100 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span class="text-muted block">Nomor HP Pemandu / Pemboking</span>
+                    <strong id="recGuidePhone" class="font-mono text-xs text-ink">-</strong>
+                  </div>
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <a id="btnReceiptWaGuide" href="#" target="_blank" rel="noopener noreferrer" class="px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold transition">Chat WhatsApp</a>
+                    <a id="btnReceiptCallGuide" href="#" class="px-3 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder font-semibold transition">Telepon</a>
+                    <button id="btnReceiptCopyPhone" type="button" class="px-3 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-ink font-semibold transition">Salin HP</button>
+                  </div>
+                </div>
               </div>
+
+              <form id="receiptContactForm" class="bg-white rounded-xl p-3.5 border border-emerald-200 space-y-2.5 text-[11px]">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="font-bold text-ink">Kirim Pesan / Konfirmasi Jadwal ke Pemandu &amp; Admin</span>
+                  <span class="text-[10px] font-mono text-muted">POST /api/v1/booking-contacts</span>
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <div>
+                    <label for="recContactChannel" class="block text-[10px] font-semibold text-muted mb-1">Saluran Pilihan</label>
+                    <select id="recContactChannel" class="w-full bg-lokalesoft/50 border border-lokaleborder rounded-xl px-2.5 py-1.5 text-xs text-ink">
+                      <option value="whatsapp">WhatsApp</option>
+                      <option value="phone">Telepon</option>
+                      <option value="email">Email</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="recContactPhone" class="block text-[10px] font-semibold text-muted mb-1">Nomor HP Pemesan</label>
+                    <input id="recContactPhone" type="tel" maxlength="25" placeholder="081234567890" class="w-full bg-lokalesoft/50 border border-lokaleborder rounded-xl px-2.5 py-1.5 text-xs text-ink font-mono" />
+                  </div>
+                </div>
+                <div>
+                  <label for="recContactMessage" class="block text-[10px] font-semibold text-muted mb-1">Pesan untuk Pemandu / Admin</label>
+                  <textarea id="recContactMessage" rows="2" required minlength="5" placeholder="Halo, saya ingin mengonfirmasi titik kumpul dan jam penjemputan..." class="w-full bg-lokalesoft/50 border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink"></textarea>
+                </div>
+                <div id="recContactFeedback" class="hidden p-2 rounded-xl text-[11px] font-medium"></div>
+                <div class="flex justify-end">
+                  <button id="btnReceiptSendContact" type="submit" class="px-4 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-semibold text-xs transition">Kirim Pesan Kontak</button>
+                </div>
+              </form>
             </div>
 
             <div class="flex flex-wrap items-center justify-between gap-2">
@@ -896,6 +950,11 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
               <input id="regEmail" type="email" autocomplete="email" required maxlength="100" placeholder="nadia@email.com" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2.5 text-xs text-ink focus:outline-none" />
             </div>
             <div>
+              <label for="regPhoneNumber" class="block text-[11px] font-semibold text-muted mb-1">Nomor HP / WhatsApp <span class="text-rose-500">*</span></label>
+              <input id="regPhoneNumber" type="tel" autocomplete="tel" required minlength="8" maxlength="25" placeholder="081234567890 atau +6281234567890" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2.5 text-xs text-ink font-mono focus:outline-none" />
+              <p class="text-[10px] text-muted mt-1">Nomor dinormalisasi otomatis ke format internasional (<code>62...</code>) untuk koordinasi tur &amp; konfirmasi admin.</p>
+            </div>
+            <div>
               <div class="flex items-center justify-between mb-1">
                 <label for="regPassword" class="text-[11px] font-semibold text-muted">Password (min. 8 karakter)</label>
                 <button type="button" data-toggle-pw="regPassword" class="text-[10px] font-semibold text-lokale hover:underline">Lihat</button>
@@ -918,6 +977,43 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
     </div>
   </div>
 
+  <!-- MODAL KONFIRMASI ADMIN (PENDAFTAR, KONTAK & BOOKING) -->
+  <div id="adminConfirmModal" class="hidden fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm overflow-y-auto p-4">
+    <div data-modal-backdrop="adminConfirmModal" class="min-h-full flex items-center justify-center">
+      <div class="bg-white border border-lokaleborder rounded-3xl max-w-4xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        <div class="flex flex-wrap items-center justify-between gap-2 px-6 py-4 border-b border-slate-100 sticky top-0 z-10 bg-white">
+          <div>
+            <span class="text-[10px] font-bold uppercase tracking-wider text-amber-700">Panel Verifikasi &amp; Konfirmasi Admin</span>
+            <h3 class="text-lg font-display font-extrabold text-ink">Konfirmasi Pendaftar, Kontak &amp; Booking</h3>
+          </div>
+          <div class="flex items-center gap-2">
+            <a href="<?= site_url('admin') ?>" class="px-3 py-1.5 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 text-xs font-semibold transition">Portal Admin &rarr;</a>
+            <button id="btnRefreshAdminConfirm" type="button" class="px-3 py-1.5 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-xs font-semibold transition">Muat Ulang</button>
+            <button id="btnCloseAdminConfirmModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-lg transition">&times;</button>
+          </div>
+        </div>
+        <div class="p-6 space-y-4">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div class="flex flex-wrap gap-1.5 bg-lokalesoft p-1 rounded-full">
+              <button type="button" data-admin-tab="users" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-lokale text-white transition">Verifikasi Pendaftar &amp; HP</button>
+              <button type="button" data-admin-tab="contacts" class="px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition">Kontak &amp; Pesan</button>
+              <button type="button" data-admin-tab="bookings" class="px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition">Konfirmasi Booking</button>
+            </div>
+            <span id="adminConfirmSummary" class="text-[11px] font-semibold text-muted">Memuat...</span>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <select id="adminConfirmStatusFilter" class="bg-lokalesoft/50 border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink font-semibold">
+              <option value="ALL">Semua Status</option>
+            </select>
+            <input id="adminConfirmSearch" type="search" placeholder="Cari nama, kode booking, email, atau nomor HP..." class="flex-1 min-w-[200px] bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3.5 py-2 text-xs text-ink focus:outline-none" />
+          </div>
+          <div id="adminConfirmFeedback" class="hidden p-3 rounded-2xl text-xs font-medium"></div>
+          <div id="adminConfirmBody" class="space-y-3 text-xs"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- MODAL BOOKING SAYA -->
   <div id="myBookingsModal" class="hidden fixed inset-0 z-50 bg-ink/60 backdrop-blur-sm overflow-y-auto p-4">
     <div data-modal-backdrop="myBookingsModal" class="min-h-full flex items-center justify-center">
@@ -928,11 +1024,13 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           <h3 class="text-lg font-display font-extrabold text-ink">Daftar Booking Anda</h3>
         </div>
         <div class="flex items-center gap-2">
+          <button id="btnBookingsOpenAdminConfirm" type="button" class="hidden px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 text-xs font-semibold transition">Panel Konfirmasi Admin</button>
           <button id="btnRefreshMyBookings" type="button" class="px-3 py-1.5 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-xs font-semibold transition">Muat Ulang</button>
           <button id="btnCloseMyBookingsModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-lg transition">&times;</button>
         </div>
       </div>
       <div class="p-6 space-y-4">
+        <div id="myBookingsUserSummary" class="hidden rounded-2xl bg-lokalesoft/50 border border-lokaleborder px-4 py-3 text-xs"></div>
         <div class="flex flex-wrap items-center justify-between gap-2">
           <div class="flex flex-wrap gap-1.5">
             <button type="button" data-booking-filter="ALL" class="px-3 py-1 rounded-full text-[11px] font-bold bg-lokale text-white transition">Semua</button>

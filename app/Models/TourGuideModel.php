@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Libraries\PhoneNormalizer;
 use CodeIgniter\Database\Exceptions\DatabaseException;
 use CodeIgniter\Model;
 
@@ -369,13 +370,7 @@ class TourGuideModel extends Model
      */
     private function normalizePhoneNumber(string $phone): string
     {
-        $clean = preg_replace('/[^0-9]/', '', $phone);
-        if (str_starts_with($clean, '08')) {
-            $clean = '62' . substr($clean, 1);
-        } elseif (str_starts_with($clean, '8')) {
-            $clean = '62' . $clean;
-        }
-        return $clean;
+        return PhoneNormalizer::normalize($phone);
     }
 
     /**

@@ -4,6 +4,7 @@ namespace App\Controllers\Api\V1;
 
 use App\Libraries\DbTransactionRunner;
 use App\Libraries\PgErrorMapper;
+use App\Models\BookingContactModel;
 use App\Models\BookingModel;
 use CodeIgniter\HTTP\ResponseInterface;
 use Throwable;
@@ -79,6 +80,10 @@ class BookingController extends BaseApiController
                     return $this->respondError('Akses ditolak: Anda tidak memiliki izin untuk melihat reservasi pemandu lain.', 403);
                 }
             }
+
+            $contactModel = new BookingContactModel();
+            $contactsRes = $contactModel->getContacts(['booking_id' => $id], 1, 20);
+            $booking['contacts'] = $contactsRes['items'];
 
             return $this->respondSuccess($booking, 'Detail reservasi berhasil dimuat.');
         } catch (Throwable $e) {

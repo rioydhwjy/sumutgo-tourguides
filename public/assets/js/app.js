@@ -1136,11 +1136,22 @@
 
     const phoneEl = document.getElementById('modalPhone');
     const waLink = document.getElementById('modalWhatsappLink');
-    const phoneDigits = String(g.phone || '').replace(/[^0-9]/g, '');
-    if (phoneEl) phoneEl.textContent = phoneDigits ? `+${phoneDigits}` : '-';
+    const callLink = document.getElementById('modalCallLink');
+    const copyBtn = document.getElementById('btnModalCopyPhone');
+    const phoneDigits = toPhoneDigits(g.phone);
+    if (phoneEl) phoneEl.textContent = formatDisplayPhone(phoneDigits);
     if (waLink) {
-      waLink.href = phoneDigits ? `https://wa.me/${phoneDigits}` : '#';
+      const msg = encodeURIComponent(`Halo ${g.name}, saya tertarik dengan layanan pemandu wisata SumutGO (${g.id}).`);
+      waLink.href = phoneDigits ? `https://wa.me/${phoneDigits}?text=${msg}` : '#';
       waLink.classList.toggle('hidden', !phoneDigits);
+    }
+    if (callLink) {
+      callLink.href = phoneDigits ? `tel:+${phoneDigits}` : '#';
+      callLink.classList.toggle('hidden', !phoneDigits);
+    }
+    if (copyBtn) {
+      copyBtn.dataset.copyPhone = phoneDigits ? `+${phoneDigits}` : '';
+      copyBtn.classList.toggle('hidden', !phoneDigits);
     }
 
     document.getElementById('modalDestName').textContent = g.destName || '-';
@@ -1379,6 +1390,7 @@
       document.getElementById('recTotalPrice').textContent = formatIdr(created.total_price_idr || (g.price * state.booking.days));
       document.getElementById('recGuests').textContent = `${created.number_of_guests || state.booking.guests} Orang`;
       document.getElementById('recMeetingPoint').textContent = created.meeting_point || state.booking.meetingPoint || g.address;
+      populateReceiptContactSection(created, g);
 
       setBookingStep('success');
       global.SumutGoAuth.showToast(`Booking ${created.booking_code || ''} berhasil diajukan!`, 'success');
@@ -1415,6 +1427,102 @@
     }
   }
 
+  function toPhoneDigits(raw) {
+    let digits = String(raw || '').replace(/[^0-9]/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('0')) {
+      digits = `62${digits.slice(1)}`;
+    }
+    return digits;
+  }
+
+  function formatDisplayPhone(raw) {
+    const digits = toPhoneDigits(raw);
+    return digits ? `+${digits}` : '-';
+  }
+
+  async function copyPhoneText(raw, label = 'Nomor HP') {
+    const formatted = formatDisplayPhone(raw);
+    if (!formatted || formatted === '-') return;
+    try {
+      if (global.navigator?.clipboard?.writeText) {
+        await global.navigator.clipboard.writeText(formatted);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = formatted;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      global.SumutGoAuth?.showToast(`${label} disalin: ${formatted}`, 'success');
+    } catch (_) {
+      global.SumutGoAuth?.showToast(`Salin manual: ${formatted}`, 'info');
+    }
+  }
+
+  function contactStatusBadgeMeta(status) {
+    const s = String(status || 'unverified').toLowerCase();
+    if (s === 'confirmed') {
+      return { label: 'Terkonfirmasi Admin', cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
+    }
+    if (s === 'contacted') {
+      return { label: 'Sedang Dihubungi', cls: 'bg-amber-50 text-amber-800 border-amber-200' };
+    }
+    return { label: 'Menunggu Konfirmasi', cls: 'bg-slate-100 text-slate-600 border-slate-200' };
+  }
+
+  function populateReceiptContactSection(created, guide) {
+    const g = guide || {};
+    const guideDigits = toPhoneDigits(created.guide_phone || g.phone);
+    const guideName = created.guide_name || g.name || 'Pemandu Wisata';
+    const bookingCode = created.booking_code || '';
+    const startDate = created.start_date || state.booking.startDate || '';
+
+    const recPhoneEl = document.getElementById('recGuidePhone');
+    const waEl = document.getElementById('btnReceiptWaGuide');
+    const callEl = document.getElementById('btnReceiptCallGuide');
+    const copyEl = document.getElementById('btnReceiptCopyPhone');
+
+    if (recPhoneEl) recPhoneEl.textContent = formatDisplayPhone(guideDigits);
+    if (waEl) {
+      const msg = encodeURIComponent(`Halo ${guideName}, saya sudah mengajukan booking ${bookingCode} pada SumutGO untuk tanggal ${startDate}.`);
+      waEl.href = guideDigits ? `https://wa.me/${guideDigits}?text=${msg}` : '#';
+      waEl.classList.toggle('hidden', !guideDigits);
+    }
+    if (callEl) {
+      callEl.href = guideDigits ? `tel:+${guideDigits}` : '#';
+      callEl.classList.toggle('hidden', !guideDigits);
+    }
+    if (copyEl) {
+      copyEl.dataset.copyPhone = guideDigits ? `+${guideDigits}` : '';
+      copyEl.classList.toggle('hidden', !guideDigits);
+    }
+
+    const form = document.getElementById('receiptContactForm');
+    const phoneInput = document.getElementById('recContactPhone');
+    const msgInput = document.getElementById('recContactMessage');
+    const fbEl = document.getElementById('recContactFeedback');
+    const currentUser = global.SumutGoAuth?.getUser() || {};
+
+    if (form) {
+      form.dataset.bookingId = String(created.booking_id || '');
+    }
+    if (phoneInput) {
+      const formatted = formatDisplayPhone(currentUser.phone_number || created.tourist_phone || '');
+      phoneInput.value = formatted === '-' ? '' : formatted;
+    }
+    if (msgInput) {
+      msgInput.value = '';
+    }
+    if (fbEl) {
+      fbEl.textContent = '';
+      fbEl.classList.add('hidden');
+    }
+  }
+
   // =========================================================================
   // MODAL BOOKING SAYA (DAFTAR RESERVASI, UPDATE STATUS & REVIEW)
   // =========================================================================
@@ -1432,7 +1540,33 @@
   async function loadMyBookings() {
     const listEl = document.getElementById('myBookingsList');
     const summaryEl = document.getElementById('myBookingsCountInfo');
+    const userSummaryEl = document.getElementById('myBookingsUserSummary');
+    const adminShortcutBtn = document.getElementById('btnBookingsOpenAdminConfirm');
     if (!listEl) return;
+
+    const user = global.SumutGoAuth.getUser() || {};
+    const role = String(user.role || 'wisatawan').toLowerCase();
+
+    if (adminShortcutBtn) {
+      adminShortcutBtn.classList.toggle('hidden', role !== 'admin');
+    }
+
+    if (userSummaryEl) {
+      const userPhone = formatDisplayPhone(user.phone_number);
+      const isVerified = Boolean(user.is_verified);
+      const verifiedBadge = isVerified
+        ? '<span class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">✓ Akun &amp; Nomor HP Terkonfirmasi Admin</span>'
+        : '<span class="px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">⏳ Menunggu Konfirmasi Admin</span>';
+
+      userSummaryEl.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="space-y-0.5">
+          <div class="font-bold text-ink">${escapeHtml(user.full_name || user.email || 'Pengguna')} <span class="font-normal text-muted">(${escapeHtml(user.email || '-')})</span></div>
+          <div class="text-[11px] text-muted">Nomor HP Terdaftar: <strong class="font-mono text-ink">${escapeHtml(userPhone)}</strong></div>
+        </div>
+        ${verifiedBadge}
+      </div>`;
+      userSummaryEl.classList.remove('hidden');
+    }
 
     listEl.innerHTML = '<div class="py-10 text-center text-xs text-muted">Memuat data reservasi dari server...</div>';
 
@@ -1457,8 +1591,8 @@
         return;
       }
 
-      const user = global.SumutGoAuth.getUser() || {};
-      const role = String(user.role || 'wisatawan').toLowerCase();
+      const defaultSenderPhoneRaw = formatDisplayPhone(user.phone_number);
+      const defaultSenderPhone = defaultSenderPhoneRaw === '-' ? '' : defaultSenderPhoneRaw;
 
       listEl.innerHTML = items.map((b) => {
         const status = String(b.status || '').toLowerCase();
@@ -1466,7 +1600,17 @@
         const canTouristReview = role === 'wisatawan' && status === 'completed' && !b.review_id;
         const canOperatorManage = role === 'guide' || role === 'admin';
 
-        let actionButtons = '';
+        const guideDigits = toPhoneDigits(b.guide_phone);
+        const touristDigits = toPhoneDigits(b.tourist_phone);
+        const waGuideText = encodeURIComponent(`Halo ${b.guide_name || 'Pemandu'}, terkait booking ${b.booking_code} (${b.start_date}).`);
+        const waTouristText = encodeURIComponent(`Halo ${b.tourist_name || 'Pemesan'}, konfirmasi booking SumutGO ${b.booking_code} (${b.start_date}).`);
+        const contactCount = Number(b.contact_count || 0);
+        const latestContactMeta = contactCount > 0 ? contactStatusBadgeMeta(b.latest_contact_status) : null;
+        const touristVerifiedBadge = b.tourist_verified
+          ? '<span class="px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[9px] font-bold">HP Terkonfirmasi</span>'
+          : '<span class="px-1.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[9px] font-bold">Belum Verifikasi</span>';
+
+        let actionButtons = `<button type="button" data-toggle-contacts="${b.booking_id}" class="px-3 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[11px] font-semibold transition">Pesan &amp; Kontak (<span data-contact-count="${b.booking_id}">${contactCount}</span>)</button>`;
         if (canTouristCancel) {
           actionButtons += `<button type="button" data-cancel-booking="${b.booking_id}" data-version="${b.version}" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 text-[11px] font-semibold transition">Batalkan</button>`;
         }
@@ -1509,11 +1653,36 @@
                </form>`
             : '';
 
+        const contactsPanel = `<div data-contacts-panel="${b.booking_id}" class="hidden mt-2.5 p-3 rounded-xl bg-lokalesoft/40 border border-lokaleborder space-y-2.5 text-[11px]">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="font-bold text-ink">Riwayat Kontak &amp; Pesan Booking</span>
+            ${latestContactMeta ? `<span class="px-2 py-0.5 rounded-full border text-[10px] font-bold ${latestContactMeta.cls}">${latestContactMeta.label}</span>` : ''}
+          </div>
+          <div data-contacts-thread="${b.booking_id}" class="space-y-2 text-[11px]">
+            <div class="text-muted">Memuat riwayat pesan...</div>
+          </div>
+          <form data-contact-form="${b.booking_id}" class="pt-2 border-t border-lokaleborder/60 space-y-2">
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <select name="preferred_channel" class="bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 text-xs text-ink">
+                <option value="whatsapp">WhatsApp</option>
+                <option value="phone">Telepon</option>
+                <option value="email">Email</option>
+              </select>
+              <input name="contact_phone" type="tel" maxlength="25" value="${escapeHtml(defaultSenderPhone)}" placeholder="081234567890" class="bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 text-xs font-mono text-ink" />
+            </div>
+            <textarea name="inquiry_message" rows="2" required minlength="3" maxlength="1000" placeholder="Kirim pesan ke pemandu/pemboking atau catatan untuk konfirmasi admin..." class="w-full bg-white border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink"></textarea>
+            <div class="flex justify-end">
+              <button type="submit" class="px-4 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-semibold transition">Kirim Pesan Kontak</button>
+            </div>
+          </form>
+        </div>`;
+
         return `<div class="bg-white border border-lokaleborder rounded-2xl p-4 space-y-2 text-xs shadow-sm">
           <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
               <span class="font-mono font-bold text-lokale bg-lokalesoft px-2.5 py-0.5 rounded-full">${escapeHtml(b.booking_code)}</span>
               <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full border uppercase ${bookingStatusBadgeClass(b.status)}">${escapeHtml(b.status)}</span>
+              ${latestContactMeta ? `<span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${latestContactMeta.cls}">Kontak: ${latestContactMeta.label}</span>` : ''}
               <span class="text-[10px] font-mono text-muted">v${escapeHtml(b.version)}</span>
             </div>
             <strong class="font-mono text-sm text-lokale">${formatIdr(b.total_price_idr)}</strong>
@@ -1521,7 +1690,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
             <div>
               <div class="font-bold text-ink">${escapeHtml(b.guide_name)} (${escapeHtml(b.guide_code)})</div>
-              <div class="text-muted">Pemesan: ${escapeHtml(b.tourist_name)}</div>
+              <div class="text-muted">Pemesan: ${escapeHtml(b.tourist_name)} ${touristVerifiedBadge}</div>
               <div class="text-muted">Tujuan: ${escapeHtml(b.destination_name)} • ${escapeHtml(b.transport_name)}</div>
             </div>
             <div class="sm:text-right">
@@ -1530,8 +1699,21 @@
               <div class="text-muted truncate">Kumpul: ${escapeHtml(b.meeting_point || '-')}</div>
             </div>
           </div>
+          <div class="flex flex-wrap items-center justify-between gap-2 bg-sand/40 border border-lokaleborder/60 rounded-xl px-3 py-2 text-[11px]">
+            <div class="space-y-0.5">
+              <div><span class="text-muted">HP Pemandu:</span> <strong class="font-mono text-ink">${escapeHtml(formatDisplayPhone(guideDigits))}</strong></div>
+              <div><span class="text-muted">HP Pemesan:</span> <strong class="font-mono text-ink">${escapeHtml(formatDisplayPhone(touristDigits))}</strong></div>
+            </div>
+            <div class="flex flex-wrap items-center gap-1.5">
+              ${guideDigits ? `<a href="https://wa.me/${guideDigits}?text=${waGuideText}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 font-semibold transition">WA Pemandu</a>` : ''}
+              ${guideDigits ? `<a href="tel:+${guideDigits}" class="px-2.5 py-1 rounded-full bg-white hover:bg-slate-100 text-ink border border-slate-200 font-semibold transition">Telp Pemandu</a>` : ''}
+              ${guideDigits ? `<button type="button" data-copy-phone="+${guideDigits}" class="px-2.5 py-1 rounded-full bg-white hover:bg-slate-100 text-ink border border-slate-200 font-semibold transition">Salin HP Pemandu</button>` : ''}
+              ${canOperatorManage && touristDigits ? `<a href="https://wa.me/${touristDigits}?text=${waTouristText}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-full bg-sky-50 hover:bg-sky-600 text-sky-700 hover:text-white border border-sky-200 font-semibold transition">WA Pemesan</a>` : ''}
+            </div>
+          </div>
           ${b.notes ? `<div class="text-[11px] text-muted bg-sand/50 rounded-xl px-2.5 py-1.5">Catatan: ${escapeHtml(b.notes)}</div>` : ''}
           ${b.cancel_reason ? `<div class="text-[11px] text-rose-700 bg-rose-50 rounded-xl px-2.5 py-1.5">Alasan batal: ${escapeHtml(b.cancel_reason)}</div>` : ''}
+          ${contactsPanel}
           ${reviewBlock}
           ${actionButtons ? `<div class="pt-2 border-t border-slate-100 flex flex-wrap justify-end gap-2">${actionButtons}</div>` : ''}
         </div>`;
@@ -1540,6 +1722,71 @@
       bindMyBookingsActions(listEl);
     } catch (err) {
       listEl.innerHTML = `<div class="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs">${escapeHtml(err.message || 'Gagal memuat daftar reservasi.')}</div>`;
+    }
+  }
+
+  async function loadBookingContactsThread(bookingId, container) {
+    const threadEl = container.querySelector(`[data-contacts-thread="${bookingId}"]`);
+    if (!threadEl) return;
+    threadEl.innerHTML = '<div class="text-muted">Memuat riwayat pesan kontak...</div>';
+
+    const user = global.SumutGoAuth?.getUser() || {};
+    const isAdmin = String(user.role || '').toLowerCase() === 'admin';
+
+    try {
+      const resp = await global.SumutGoApi.bookingContacts.list({ booking_id: bookingId, page: 1, per_page: 25 });
+      const rows = Array.isArray(resp?.data) ? resp.data : [];
+      const countBadge = container.querySelector(`[data-contact-count="${bookingId}"]`);
+      if (countBadge) countBadge.textContent = String(rows.length);
+
+      if (!rows.length) {
+        threadEl.innerHTML = '<div class="text-muted italic">Belum ada pesan komunikasi untuk booking ini. Kirim pesan di bawah untuk menghubungi pemandu atau pemboking.</div>';
+        return;
+      }
+
+      threadEl.innerHTML = rows.map((c) => {
+        const badge = contactStatusBadgeMeta(c.confirmation_status);
+        const phone = formatDisplayPhone(c.contact_phone);
+        const confirmBtn = isAdmin && c.confirmation_status !== 'confirmed'
+          ? `<button type="button" data-inline-confirm-contact="${c.contact_id}" data-booking-id="${bookingId}" class="px-2.5 py-0.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-semibold transition">Konfirmasi</button>`
+          : '';
+        return `<div class="bg-white border border-lokaleborder rounded-xl p-2.5 space-y-1">
+          <div class="flex flex-wrap items-center justify-between gap-1.5">
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded-full bg-lokalesoft text-lokale font-bold uppercase text-[9px]">${escapeHtml(c.sender_role)}</span>
+              <span class="px-2 py-0.5 rounded-full bg-slate-100 text-ink font-semibold uppercase text-[9px]">${escapeHtml(c.preferred_channel)}</span>
+              <span class="font-mono text-[10px] text-muted">${escapeHtml(phone)}</span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="px-2 py-0.5 rounded-full border text-[9px] font-bold ${badge.cls}">${badge.label}</span>
+              ${confirmBtn}
+            </div>
+          </div>
+          <div class="text-ink">${escapeHtml(c.inquiry_message)}</div>
+          ${c.admin_note ? `<div class="text-[10px] text-emerald-800 bg-emerald-50/70 rounded-lg px-2 py-1">Catatan Admin: ${escapeHtml(c.admin_note)}</div>` : ''}
+        </div>`;
+      }).join('');
+
+      threadEl.querySelectorAll('[data-inline-confirm-contact]').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+          const contactId = Number(btn.dataset.inlineConfirmContact);
+          const bId = Number(btn.dataset.bookingId);
+          btn.disabled = true;
+          try {
+            await global.SumutGoApi.bookingContacts.confirm(contactId, {
+              confirmation_status: 'confirmed',
+              admin_note: 'Dikonfirmasi Admin melalui panel booking.',
+            });
+            global.SumutGoAuth?.showToast('Kontak booking berhasil dikonfirmasi.', 'success');
+            await loadBookingContactsThread(bId, container);
+          } catch (err) {
+            global.SumutGoAuth?.showToast(err.message || 'Gagal mengonfirmasi kontak.', 'error');
+            btn.disabled = false;
+          }
+        });
+      });
+    } catch (err) {
+      threadEl.innerHTML = `<div class="text-rose-600">${escapeHtml(err.message || 'Gagal memuat riwayat kontak.')}</div>`;
     }
   }
 
@@ -1583,6 +1830,48 @@
         } catch (err) {
           global.SumutGoAuth.showToast(err.message || 'Gagal memperbarui status.', 'error');
           btn.disabled = false;
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-toggle-contacts]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const bookingId = Number(btn.dataset.toggleContacts);
+        const panel = container.querySelector(`[data-contacts-panel="${bookingId}"]`);
+        if (!panel) return;
+        const willOpen = panel.classList.contains('hidden');
+        panel.classList.toggle('hidden');
+        if (willOpen) {
+          loadBookingContactsThread(bookingId, container);
+        }
+      });
+    });
+
+    container.querySelectorAll('[data-contact-form]').forEach((form) => {
+      form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const bookingId = Number(form.dataset.contactForm);
+        const channel = form.querySelector('[name="preferred_channel"]')?.value || 'whatsapp';
+        const phone = (form.querySelector('[name="contact_phone"]')?.value || '').trim();
+        const msgInput = form.querySelector('[name="inquiry_message"]');
+        const msg = (msgInput?.value || '').trim();
+        const submitBtn = form.querySelector('button[type="submit"]');
+
+        if (submitBtn) submitBtn.disabled = true;
+        try {
+          await global.SumutGoApi.bookingContacts.create({
+            booking_id: bookingId,
+            preferred_channel: channel,
+            contact_phone: phone,
+            inquiry_message: msg,
+          });
+          if (msgInput) msgInput.value = '';
+          global.SumutGoAuth.showToast('Pesan kontak berhasil dikirim.', 'success');
+          await loadBookingContactsThread(bookingId, container);
+        } catch (err) {
+          global.SumutGoAuth.showToast(err.message || 'Gagal mengirim pesan kontak.', 'error');
+        } finally {
+          if (submitBtn) submitBtn.disabled = false;
         }
       });
     });
@@ -1687,10 +1976,286 @@
     if (t === 'analytics') renderAnalytics();
   }
 
+  // =========================================================================
+  // MODAL KONFIRMASI ADMIN (USERS, KONTAK BOOKING & BOOKINGS)
+  // =========================================================================
+  const adminConfirmState = {
+    tab: 'users',
+    statusFilter: 'ALL',
+  };
+
+  function setAdminConfirmFeedback(msg, isError = false) {
+    const el = document.getElementById('adminConfirmFeedback');
+    if (!el) return;
+    if (!msg) {
+      el.textContent = '';
+      el.classList.add('hidden');
+      return;
+    }
+    el.className = isError
+      ? 'p-3 rounded-2xl border border-rose-200 bg-rose-50 text-rose-700 text-xs font-medium'
+      : 'p-3 rounded-2xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-xs font-medium';
+    el.textContent = msg;
+    el.classList.remove('hidden');
+  }
+
+  function populateAdminConfirmFilter(tab) {
+    const sel = document.getElementById('adminConfirmStatusFilter');
+    if (!sel) return;
+    const opts = tab === 'users'
+      ? [['ALL', 'Semua Pendaftar'], ['false', 'Belum Terkonfirmasi'], ['true', 'Sudah Terkonfirmasi']]
+      : tab === 'contacts'
+        ? [['ALL', 'Semua Kontak'], ['unverified', 'Belum Diverifikasi'], ['contacted', 'Sedang Dihubungi'], ['confirmed', 'Terkonfirmasi']]
+        : [['ALL', 'Semua Booking'], ['pending', 'Pending'], ['confirmed', 'Confirmed'], ['ongoing', 'Ongoing'], ['completed', 'Completed'], ['cancelled', 'Cancelled']];
+    sel.innerHTML = opts.map(([val, lbl]) => `<option value="${val}">${lbl}</option>`).join('');
+    adminConfirmState.statusFilter = 'ALL';
+  }
+
+  async function openAdminConfirmModal(defaultTab = 'users') {
+    const user = global.SumutGoAuth?.getUser() || {};
+    if (!isLoggedIn() || String(user.role || '').toLowerCase() !== 'admin') {
+      global.SumutGoAuth?.showToast('Hanya Admin yang dapat mengakses panel konfirmasi ini.', 'error');
+      return;
+    }
+    const modal = document.getElementById('adminConfirmModal');
+    if (modal) modal.classList.remove('hidden');
+    await switchAdminConfirmTab(defaultTab);
+  }
+
+  async function switchAdminConfirmTab(tab) {
+    adminConfirmState.tab = ['users', 'contacts', 'bookings'].includes(tab) ? tab : 'users';
+    document.querySelectorAll('[data-admin-tab]').forEach((btn) => {
+      btn.className = btn.dataset.adminTab === adminConfirmState.tab
+        ? 'px-3.5 py-1.5 rounded-full text-xs font-bold bg-lokale text-white transition'
+        : 'px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition';
+    });
+    populateAdminConfirmFilter(adminConfirmState.tab);
+    setAdminConfirmFeedback('');
+    await loadAdminConfirmData();
+  }
+
+  async function loadAdminConfirmData() {
+    const bodyEl = document.getElementById('adminConfirmBody');
+    const summaryEl = document.getElementById('adminConfirmSummary');
+    if (!bodyEl) return;
+
+    bodyEl.innerHTML = '<div class="py-10 text-center text-muted">Memuat data dari Supabase via API v1...</div>';
+    const q = (document.getElementById('adminConfirmSearch')?.value || '').trim();
+    const filter = adminConfirmState.statusFilter;
+
+    try {
+      if (adminConfirmState.tab === 'users') {
+        const resp = await global.SumutGoApi.users.list({
+          page: 1,
+          per_page: 50,
+          is_verified: filter !== 'ALL' ? filter : '',
+          q,
+        });
+        const rows = Array.isArray(resp?.data) ? resp.data : [];
+        if (summaryEl) summaryEl.textContent = `${rows.length} pendaftar ditemukan`;
+        if (!rows.length) {
+          bodyEl.innerHTML = '<div class="py-8 text-center bg-lokalesoft/30 rounded-2xl text-muted">Tidak ada data pendaftar pada filter ini.</div>';
+          return;
+        }
+
+        bodyEl.innerHTML = rows.map((u) => {
+          const digits = toPhoneDigits(u.phone_number);
+          const badge = u.is_verified
+            ? '<span class="px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">✓ Terkonfirmasi</span>'
+            : '<span class="px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[10px] font-bold">⏳ Belum Verifikasi</span>';
+          const nextVerified = u.is_verified ? 'false' : 'true';
+          const actionLabel = u.is_verified ? 'Batalkan Verifikasi' : 'Konfirmasi Pendaftar & HP';
+          const actionCls = u.is_verified
+            ? 'bg-slate-100 hover:bg-slate-200 text-ink'
+            : 'bg-emerald-600 hover:bg-emerald-700 text-white';
+
+          return `<div class="bg-white border border-lokaleborder rounded-2xl p-4 space-y-2 shadow-sm">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <strong class="text-sm text-ink">${escapeHtml(u.full_name)}</strong>
+                <span class="px-2 py-0.5 rounded-full bg-lokalesoft text-lokale text-[10px] font-bold uppercase">${escapeHtml(u.role)}</span>
+                ${badge}
+              </div>
+              <span class="font-mono text-[11px] text-muted">ID #${escapeHtml(u.user_id)} • ${escapeHtml(u.booking_count || 0)} booking</span>
+            </div>
+            <div class="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+              <div>Email: <strong class="text-ink">${escapeHtml(u.email)}</strong> • HP: <strong class="font-mono text-lokale">${escapeHtml(formatDisplayPhone(digits))}</strong></div>
+              <div class="flex flex-wrap items-center gap-1.5">
+                ${digits ? `<a href="https://wa.me/${digits}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 font-semibold transition">Chat WA</a>` : ''}
+                ${digits ? `<button type="button" data-copy-phone="+${digits}" class="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-ink font-semibold transition">Salin HP</button>` : ''}
+              </div>
+            </div>
+            ${u.verification_note ? `<div class="text-[11px] text-muted bg-lokalesoft/40 rounded-xl px-3 py-1.5">Catatan Admin: ${escapeHtml(u.verification_note)}</div>` : ''}
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              <input type="text" data-admin-user-note="${u.user_id}" value="${escapeHtml(u.verification_note || '')}" placeholder="Catatan verifikasi admin (opsional)..." class="flex-1 min-w-[200px] bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-1.5 text-xs" />
+              <button type="button" data-admin-verify-user="${u.user_id}" data-next-verified="${nextVerified}" class="px-3.5 py-1.5 rounded-full ${actionCls} text-[11px] font-semibold transition">${actionLabel}</button>
+            </div>
+          </div>`;
+        }).join('');
+
+        bodyEl.querySelectorAll('[data-admin-verify-user]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const userId = Number(btn.dataset.adminVerifyUser);
+            const isVerified = btn.dataset.nextVerified === 'true';
+            const note = bodyEl.querySelector(`[data-admin-user-note="${userId}"]`)?.value || '';
+            btn.disabled = true;
+            try {
+              const resp = await global.SumutGoApi.users.verify(userId, {
+                is_verified: isVerified,
+                verification_note: note,
+              });
+              setAdminConfirmFeedback(resp.message || 'Status verifikasi pengguna diperbarui.', false);
+              global.SumutGoAuth?.showToast(resp.message || 'Status pendaftar diperbarui.', 'success');
+              await loadAdminConfirmData();
+            } catch (err) {
+              setAdminConfirmFeedback(err.message || 'Gagal memverifikasi pengguna.', true);
+              btn.disabled = false;
+            }
+          });
+        });
+      } else if (adminConfirmState.tab === 'contacts') {
+        const resp = await global.SumutGoApi.bookingContacts.list({
+          page: 1,
+          per_page: 50,
+          confirmation_status: filter !== 'ALL' ? filter : '',
+          q,
+        });
+        const rows = Array.isArray(resp?.data) ? resp.data : [];
+        if (summaryEl) summaryEl.textContent = `${rows.length} pesan kontak ditampilkan`;
+        if (!rows.length) {
+          bodyEl.innerHTML = '<div class="py-8 text-center bg-lokalesoft/30 rounded-2xl text-muted">Belum ada data kontak komunikasi booking pada filter ini.</div>';
+          return;
+        }
+
+        bodyEl.innerHTML = rows.map((c) => {
+          const digits = toPhoneDigits(c.contact_phone);
+          const badge = contactStatusBadgeMeta(c.confirmation_status);
+          return `<div class="bg-white border border-lokaleborder rounded-2xl p-4 space-y-2 shadow-sm">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono font-bold text-lokale bg-lokalesoft px-2.5 py-0.5 rounded-full">${escapeHtml(c.booking_code)}</span>
+                <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold ${badge.cls}">${badge.label}</span>
+                <span class="text-[10px] font-semibold uppercase text-muted">${escapeHtml(c.sender_role)} via ${escapeHtml(c.preferred_channel)}</span>
+              </div>
+              <span class="font-mono text-[11px] text-muted">Kontak #${escapeHtml(c.contact_id)}</span>
+            </div>
+            <div class="text-[11px] text-muted">
+              Pemesan: <strong class="text-ink">${escapeHtml(c.tourist_name)}</strong> (${escapeHtml(formatDisplayPhone(c.tourist_phone))}) ↔
+              Pemandu: <strong class="text-ink">${escapeHtml(c.guide_name)}</strong> (${escapeHtml(formatDisplayPhone(c.guide_phone))})
+            </div>
+            <div class="p-2.5 rounded-xl bg-lokalesoft/40 border border-lokaleborder text-xs text-ink">${escapeHtml(c.inquiry_message)}</div>
+            <div class="flex flex-wrap items-center gap-2 pt-1">
+              ${digits ? `<a href="https://wa.me/${digits}" target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 rounded-full bg-emerald-50 hover:bg-emerald-600 text-emerald-700 hover:text-white border border-emerald-200 font-semibold text-[11px] transition">WA Pengirim</a>` : ''}
+              ${digits ? `<button type="button" data-copy-phone="+${digits}" class="px-2.5 py-1 rounded-full bg-slate-100 hover:bg-slate-200 text-ink font-semibold text-[11px] transition">Salin HP</button>` : ''}
+              <input type="text" data-admin-contact-note="${c.contact_id}" value="${escapeHtml(c.admin_note || '')}" placeholder="Catatan tindak lanjut admin..." class="flex-1 min-w-[180px] bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-1.5 text-xs" />
+              <button type="button" data-admin-confirm-contact="${c.contact_id}" data-next-status="contacted" class="px-3 py-1.5 rounded-full bg-amber-50 hover:bg-amber-600 text-amber-800 hover:text-white border border-amber-200 text-[11px] font-semibold transition">Tandai Dihubungi</button>
+              <button type="button" data-admin-confirm-contact="${c.contact_id}" data-next-status="confirmed" class="px-3.5 py-1.5 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-semibold transition">Konfirmasi</button>
+            </div>
+          </div>`;
+        }).join('');
+
+        bodyEl.querySelectorAll('[data-admin-confirm-contact]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const contactId = Number(btn.dataset.adminConfirmContact);
+            const nextStatus = btn.dataset.nextStatus;
+            const note = bodyEl.querySelector(`[data-admin-contact-note="${contactId}"]`)?.value || '';
+            btn.disabled = true;
+            try {
+              const resp = await global.SumutGoApi.bookingContacts.confirm(contactId, {
+                confirmation_status: nextStatus,
+                admin_note: note,
+              });
+              setAdminConfirmFeedback(resp.message || 'Status kontak booking diperbarui.', false);
+              global.SumutGoAuth?.showToast(resp.message || 'Status kontak diperbarui.', 'success');
+              await loadAdminConfirmData();
+            } catch (err) {
+              setAdminConfirmFeedback(err.message || 'Gagal memperbarui status kontak.', true);
+              btn.disabled = false;
+            }
+          });
+        });
+      } else {
+        const resp = await global.SumutGoApi.bookings.list({
+          page: 1,
+          per_page: 50,
+          status: filter !== 'ALL' ? filter : '',
+        });
+        let rows = Array.isArray(resp?.data) ? resp.data : [];
+        if (q) {
+          const ql = q.toLowerCase();
+          rows = rows.filter((b) => `${b.booking_code} ${b.tourist_name} ${b.guide_name} ${b.tourist_phone || ''} ${b.guide_phone || ''}`.toLowerCase().includes(ql));
+        }
+        if (summaryEl) summaryEl.textContent = `${rows.length} booking ditampilkan`;
+        if (!rows.length) {
+          bodyEl.innerHTML = '<div class="py-8 text-center bg-lokalesoft/30 rounded-2xl text-muted">Tidak ada booking pada filter ini.</div>';
+          return;
+        }
+
+        bodyEl.innerHTML = rows.map((b) => {
+          let btns = '';
+          if (b.status === 'pending') {
+            btns += `<button type="button" data-admin-booking-status="${b.booking_id}" data-version="${b.version}" data-next="confirmed" class="px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white font-semibold">Konfirmasi Booking</button>`;
+            btns += `<button type="button" data-admin-booking-status="${b.booking_id}" data-version="${b.version}" data-next="cancelled" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 font-semibold">Batalkan</button>`;
+          } else if (b.status === 'confirmed') {
+            btns += `<button type="button" data-admin-booking-status="${b.booking_id}" data-version="${b.version}" data-next="ongoing" class="px-3 py-1 rounded-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold">Mulai Tur</button>`;
+            btns += `<button type="button" data-admin-booking-status="${b.booking_id}" data-version="${b.version}" data-next="cancelled" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 font-semibold">Batalkan</button>`;
+          } else if (b.status === 'ongoing') {
+            btns += `<button type="button" data-admin-booking-status="${b.booking_id}" data-version="${b.version}" data-next="completed" class="px-3 py-1 rounded-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold">Selesaikan Tur</button>`;
+          }
+          return `<div class="bg-white border border-lokaleborder rounded-2xl p-4 space-y-2 shadow-sm">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <div class="flex flex-wrap items-center gap-2">
+                <span class="font-mono font-bold text-lokale bg-lokalesoft px-2.5 py-0.5 rounded-full">${escapeHtml(b.booking_code)}</span>
+                <span class="px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${bookingStatusBadgeClass(b.status)}">${escapeHtml(b.status)}</span>
+                <span class="text-[10px] font-mono text-muted">v${escapeHtml(b.version)}</span>
+              </div>
+              <strong class="font-mono text-lokale">${formatIdr(b.total_price_idr)}</strong>
+            </div>
+            <div class="text-[11px] text-muted">
+              Pemesan: <strong class="text-ink">${escapeHtml(b.tourist_name)}</strong> (${escapeHtml(formatDisplayPhone(b.tourist_phone))}) •
+              Pemandu: <strong class="text-ink">${escapeHtml(b.guide_name)}</strong> (${escapeHtml(formatDisplayPhone(b.guide_phone))})
+            </div>
+            <div class="text-[11px] text-ink">${formatDateId(b.start_date)} – ${formatDateId(b.end_date)} (${escapeHtml(b.duration_days)} Hari • ${escapeHtml(b.number_of_guests)} Tamu)</div>
+            ${btns ? `<div class="flex flex-wrap justify-end gap-2 pt-1">${btns}</div>` : ''}
+          </div>`;
+        }).join('');
+
+        bodyEl.querySelectorAll('[data-admin-booking-status]').forEach((btn) => {
+          btn.addEventListener('click', async () => {
+            const bookingId = Number(btn.dataset.adminBookingStatus);
+            const version = Number(btn.dataset.version);
+            const nextStatus = btn.dataset.next;
+            let cancelReason;
+            if (nextStatus === 'cancelled') {
+              const pr = global.prompt('Alasan pembatalan (opsional):', 'Dibatalkan oleh Admin');
+              if (pr === null) return;
+              cancelReason = pr.trim() || 'Dibatalkan oleh Admin';
+            }
+            btn.disabled = true;
+            try {
+              const payload = { status: nextStatus, version };
+              if (cancelReason !== undefined) payload.cancel_reason = cancelReason;
+              const resp = await global.SumutGoApi.bookings.updateStatus(bookingId, payload);
+              setAdminConfirmFeedback(resp.message || `Booking diperbarui menjadi ${nextStatus}.`, false);
+              global.SumutGoAuth?.showToast(`Status booking diperbarui menjadi ${nextStatus}.`, 'success');
+              await loadAdminConfirmData();
+            } catch (err) {
+              setAdminConfirmFeedback(err.message || 'Gagal memperbarui status booking.', true);
+              btn.disabled = false;
+            }
+          });
+        });
+      }
+    } catch (err) {
+      bodyEl.innerHTML = `<div class="p-4 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700">${escapeHtml(err.message || 'Gagal memuat panel konfirmasi admin.')}</div>`;
+    }
+  }
+
   function closeAllModals() {
     document.getElementById('guideModal')?.classList.add('hidden');
     document.getElementById('compareModal')?.classList.add('hidden');
     document.getElementById('myBookingsModal')?.classList.add('hidden');
+    document.getElementById('adminConfirmModal')?.classList.add('hidden');
     global.SumutGoAuth?.closeAuthModal(true);
   }
 
@@ -1713,9 +2278,12 @@
       applyGuideModalBlurState();
     }
 
-    // 4. Jika logout, tutup modal khusus user terautentikasi
+    // 4. Jika logout atau bukan admin, tutup modal khusus user terautentikasi
     if (!authed) {
       document.getElementById('myBookingsModal')?.classList.add('hidden');
+      document.getElementById('adminConfirmModal')?.classList.add('hidden');
+    } else if (String((_user && _user.role) || '').toLowerCase() !== 'admin') {
+      document.getElementById('adminConfirmModal')?.classList.add('hidden');
     }
 
     // 5. Jalankan pending action setelah login/register (misal user tadi klik tombol Booking saat guest)
@@ -1939,6 +2507,64 @@
       openMyBookingsModal();
     });
 
+    // Receipt quick contact & message form (Step 3)
+    document.getElementById('receiptContactForm')?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.currentTarget;
+      const bookingId = Number(form.dataset.bookingId || 0);
+      const channel = document.getElementById('recContactChannel')?.value || 'whatsapp';
+      const phone = (document.getElementById('recContactPhone')?.value || '').trim();
+      const msgEl = document.getElementById('recContactMessage');
+      const fbEl = document.getElementById('recContactFeedback');
+      const btn = document.getElementById('btnReceiptSendContact');
+      const message = (msgEl?.value || '').trim();
+
+      if (!bookingId) {
+        global.SumutGoAuth?.showToast('ID booking tidak ditemukan untuk pengiriman pesan.', 'error');
+        return;
+      }
+
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Mengirim...';
+      }
+      try {
+        const resp = await global.SumutGoApi.bookingContacts.create({
+          booking_id: bookingId,
+          preferred_channel: channel,
+          contact_phone: phone,
+          inquiry_message: message,
+        });
+        if (msgEl) msgEl.value = '';
+        if (fbEl) {
+          fbEl.className = 'p-2 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] font-medium';
+          fbEl.textContent = resp.message || 'Pesan & kontak berhasil dikirim. Menunggu konfirmasi Admin/Pemandu.';
+          fbEl.classList.remove('hidden');
+        }
+        global.SumutGoAuth?.showToast('Pesan kontak berhasil dikirim!', 'success');
+      } catch (err) {
+        if (fbEl) {
+          fbEl.className = 'p-2 rounded-xl border border-rose-200 bg-rose-50 text-rose-700 text-[11px] font-medium';
+          fbEl.textContent = err.message || 'Gagal mengirim pesan kontak.';
+          fbEl.classList.remove('hidden');
+        }
+        global.SumutGoAuth?.showToast(err.message || 'Gagal mengirim pesan kontak.', 'error');
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Kirim Pesan Kontak';
+        }
+      }
+    });
+
+    // Global delegated copy phone button
+    document.addEventListener('click', (e) => {
+      const target = e.target && e.target.closest ? e.target.closest('[data-copy-phone]') : null;
+      if (!target) return;
+      const val = target.dataset.copyPhone || '';
+      if (val) copyPhoneText(val, 'Nomor HP');
+    });
+
     // Compare Modal
     document.getElementById('btnToggleCompareModal')?.addEventListener('click', openCompareModal);
     document.getElementById('btnCloseCompareModal')?.addEventListener('click', () => {
@@ -1956,6 +2582,10 @@
       document.getElementById('myBookingsModal')?.classList.add('hidden');
     });
     document.getElementById('btnRefreshMyBookings')?.addEventListener('click', loadMyBookings);
+    document.getElementById('btnBookingsOpenAdminConfirm')?.addEventListener('click', () => {
+      document.getElementById('myBookingsModal')?.classList.add('hidden');
+      openAdminConfirmModal('users');
+    });
     document.querySelectorAll('[data-booking-filter]').forEach((btn) => {
       btn.addEventListener('click', () => {
         state.myBookingsFilter = btn.dataset.bookingFilter || 'ALL';
@@ -1968,8 +2598,29 @@
       });
     });
 
+    // Admin Confirm Modal
+    document.getElementById('btnOpenAdminConfirm')?.addEventListener('click', () => openAdminConfirmModal('users'));
+    document.getElementById('btnCloseAdminConfirmModal')?.addEventListener('click', () => {
+      document.getElementById('adminConfirmModal')?.classList.add('hidden');
+    });
+    document.getElementById('btnRefreshAdminConfirm')?.addEventListener('click', loadAdminConfirmData);
+    document.querySelectorAll('[data-admin-tab]').forEach((btn) => {
+      btn.addEventListener('click', () => switchAdminConfirmTab(btn.dataset.adminTab));
+    });
+    document.getElementById('adminConfirmStatusFilter')?.addEventListener('change', (e) => {
+      adminConfirmState.statusFilter = e.target.value || 'ALL';
+      loadAdminConfirmData();
+    });
+    let adminSearchTimer = null;
+    document.getElementById('adminConfirmSearch')?.addEventListener('input', () => {
+      if (adminSearchTimer) global.clearTimeout(adminSearchTimer);
+      adminSearchTimer = global.setTimeout(() => {
+        loadAdminConfirmData();
+      }, 220);
+    });
+
     // Backdrop & ESC handling
-    ['guideModal', 'compareModal', 'myBookingsModal'].forEach((modalId) => {
+    ['guideModal', 'compareModal', 'myBookingsModal', 'adminConfirmModal'].forEach((modalId) => {
       document.getElementById(modalId)?.addEventListener('click', (e) => {
         if (e.target && (e.target.id === modalId || e.target.dataset?.modalBackdrop === modalId)) {
           document.getElementById(modalId)?.classList.add('hidden');
@@ -2011,6 +2662,7 @@
     openGuideModal,
     handleStartBooking,
     openMyBookingsModal,
+    openAdminConfirmModal,
     switchTab,
     renderDirectory,
   };

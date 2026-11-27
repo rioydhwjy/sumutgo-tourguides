@@ -58,13 +58,25 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1'], static funct
         $routes->patch('(:num)/status', 'BookingController::updateStatus/$1', ['filter' => 'jwt']);
     });
 
-    // 5. Reviews (Triggers Business Guard: Completed Bookings Only)
+    // 5. Booking Contacts / Inquiries & Admin Verification
+    $routes->group('booking-contacts', static function ($routes) {
+        $routes->get('', 'BookingContactController::index', ['filter' => 'jwt']);
+        $routes->post('', 'BookingContactController::create', ['filter' => 'jwt']);
+        $routes->patch('(:num)/confirm', 'BookingContactController::confirm/$1', ['filter' => ['jwt', 'role:admin']]);
+    });
+
+    $routes->group('users', static function ($routes) {
+        $routes->get('', 'UserController::index', ['filter' => ['jwt', 'role:admin']]);
+        $routes->patch('(:num)/verify', 'UserController::verify/$1', ['filter' => ['jwt', 'role:admin']]);
+    });
+
+    // 6. Reviews (Triggers Business Guard: Completed Bookings Only)
     $routes->group('reviews', static function ($routes) {
         $routes->get('', 'ReviewController::index');
         $routes->post('', 'ReviewController::create', ['filter' => ['jwt', 'role:wisatawan']]);
     });
 
-    // 6. Analytics & Audit Logs (Admin Audit Trail & Public Stats)
+    // 7. Analytics & Audit Logs (Admin Audit Trail & Public Stats)
     $routes->get('audit-logs', 'AnalyticsController::auditLogs', ['filter' => ['jwt', 'role:admin']]);
     $routes->get('stats', 'AnalyticsController::stats');
 });

@@ -227,6 +227,36 @@
       },
     },
 
+    bookingContacts: {
+      list(params = {}) {
+        return request(`/booking-contacts${buildQueryString(params)}`, { method: 'GET' });
+      },
+      create(payload) {
+        return request('/booking-contacts', {
+          method: 'POST',
+          body: payload,
+        });
+      },
+      confirm(id, payload) {
+        return request(`/booking-contacts/${encodeURIComponent(id)}/confirm`, {
+          method: 'PATCH',
+          body: payload,
+        });
+      },
+    },
+
+    users: {
+      list(params = {}) {
+        return request(`/users${buildQueryString(params)}`, { method: 'GET' });
+      },
+      verify(id, payload) {
+        return request(`/users/${encodeURIComponent(id)}/verify`, {
+          method: 'PATCH',
+          body: payload,
+        });
+      },
+    },
+
     stats() {
       return request('/stats', { method: 'GET' });
     },

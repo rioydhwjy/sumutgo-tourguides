@@ -106,10 +106,10 @@ class PgErrorMapper
                     'errors'     => ['daily_rate_idr' => 'Tarif harian harus > 0.'],
                 ];
             }
-            if (str_contains($msg, 'chk_guides_phone')) {
+            if (str_contains($msg, 'chk_guides_phone') || str_contains($msg, 'chk_users_phone') || str_contains($msg, 'chk_booking_contacts_phone')) {
                 return [
                     'statusCode' => 422,
-                    'message'    => 'Format nomor telepon harus diawali 62 dengan panjang 11-14 digit (contoh: 6281234567890).',
+                    'message'    => 'Format nomor HP tidak valid. Gunakan format Indonesia/internasional, contoh: 081234567890 atau 6281234567890.',
                     'errors'     => ['phone_number' => 'Format nomor telepon salah.'],
                 ];
             }

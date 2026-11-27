@@ -5,6 +5,7 @@ namespace App\Controllers\Api\V1;
 use App\Libraries\DbTransactionRunner;
 use App\Libraries\JwtService;
 use App\Libraries\PgErrorMapper;
+use App\Libraries\PhoneNormalizer;
 use App\Models\UserModel;
 use CodeIgniter\HTTP\ResponseInterface;
 use Throwable;
@@ -19,9 +20,10 @@ class AuthController extends BaseApiController
         $payload = $this->getJsonPayload();
 
         $rules = [
-            'full_name' => 'required|min_length[2]|max_length[100]',
-            'email'     => 'required|valid_email|max_length[100]',
-            'password'  => 'required|min_length[8]',
+            'full_name'    => 'required|min_length[2]|max_length[100]',
+            'email'        => 'required|valid_email|max_length[100]',
+            'phone_number' => 'required|min_length[8]|max_length[25]',
+            'password'     => 'required|min_length[8]',
         ];
 
         if (array_key_exists('password_confirmation', $payload)) {
@@ -30,6 +32,13 @@ class AuthController extends BaseApiController
 
         if (! $this->validateData($payload, $rules)) {
             return $this->respondError('Validasi formulir pendaftaran gagal.', 422, $this->validator->getErrors());
+        }
+
+        $normalizedPhone = PhoneNormalizer::normalize((string) ($payload['phone_number'] ?? ''));
+        if (! PhoneNormalizer::isValid($normalizedPhone)) {
+            return $this->respondError('Format Nomor HP tidak valid.', 422, [
+                'phone_number' => 'Gunakan nomor HP Indonesia/internasional yang valid, contoh: 081234567890 atau +6281234567890.',
+            ]);
         }
 
         $userModel = new UserModel();
@@ -42,12 +51,13 @@ class AuthController extends BaseApiController
         }
 
         try {
-            $user = DbTransactionRunner::runAsRole('role_sumutgo_mobile', null, function () use ($userModel, $payload) {
+            $user = DbTransactionRunner::runAsRole('role_sumutgo_mobile', null, function () use ($userModel, $payload, $normalizedPhone) {
                 return $userModel->createUser([
-                    'full_name' => $payload['full_name'],
-                    'email'     => $payload['email'],
-                    'password'  => $payload['password'],
-                    'role'      => 'wisatawan',
+                    'full_name'    => $payload['full_name'],
+                    'email'        => $payload['email'],
+                    'phone_number' => $normalizedPhone,
+                    'password'     => $payload['password'],
+                    'role'         => 'wisatawan', // Paksa role default wisatawan, abaikan input role publik
                 ]);
             });
 
@@ -115,17 +125,15 @@ class AuthController extends BaseApiController
         }
 
         $userModel = new UserModel();
-        $user = $userModel->find($userId);
+        $user = $userModel->findPublicById($userId);
 
         if (! $user) {
             return $this->respondError('Pengguna tidak ditemukan.', 404);
         }
 
-        if (! (bool) ($user['is_active'] ?? true)) {
+        if (! ($user['is_active'] ?? true)) {
             return $this->respondError('Akun pengguna sedang dinonaktifkan.', 403);
         }
-
-        unset($user['password_hash']);
 
         return $this->respondSuccess($user, 'Profil pengguna aktif.');
     }

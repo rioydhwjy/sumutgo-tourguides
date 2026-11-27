@@ -32,6 +32,23 @@
     toastTimer: null,
   };
 
+  function normalizePhone(rawPhone) {
+    let clean = String(rawPhone || '').replace(/[^0-9]/g, '');
+    if (!clean) return '';
+    if (clean.startsWith('0062')) {
+      clean = clean.slice(2);
+    } else if (clean.startsWith('0')) {
+      clean = '62' + clean.slice(1);
+    } else if (clean.startsWith('8')) {
+      clean = '62' + clean;
+    }
+    return clean;
+  }
+
+  function isValidPhone(normalized) {
+    return /^[1-9][0-9]{8,14}$/.test(String(normalized || ''));
+  }
+
   function isAuthenticated() {
     return Boolean(state.user && global.SumutGoApi.getToken());
   }
@@ -124,6 +141,7 @@
     const roleEl = document.getElementById('navUserRoleBadge');
     const myBookingsBtn = document.getElementById('btnOpenMyBookings');
     const myBookingsText = document.getElementById('btnOpenMyBookingsText');
+    const adminConfirmBtn = document.getElementById('btnOpenAdminConfirm');
     const adminQuickLink = document.getElementById('navAdminQuickLink');
 
     const authed = isAuthenticated();
@@ -138,6 +156,7 @@
         .map((part) => part.charAt(0).toUpperCase())
         .join('') || 'U';
       const roleMeta = getRoleBadgeMeta(state.user.role);
+      const isAdmin = String(state.user.role || '').toLowerCase() === 'admin';
 
       if (nameEl) nameEl.textContent = fullName;
       if (avatarEl) avatarEl.textContent = initials;
@@ -149,15 +168,19 @@
         myBookingsBtn.classList.remove('hidden');
         myBookingsText.textContent = state.user.role === 'guide'
           ? 'Jadwal Tur'
-          : state.user.role === 'admin'
+          : isAdmin
             ? 'Semua Booking'
             : 'Booking Saya';
       }
-      if (adminQuickLink) {
-        adminQuickLink.classList.toggle('hidden', state.user.role !== 'admin');
+      if (adminConfirmBtn) {
+        adminConfirmBtn.classList.toggle('hidden', !isAdmin);
       }
-    } else if (adminQuickLink) {
-      adminQuickLink.classList.add('hidden');
+      if (adminQuickLink) {
+        adminQuickLink.classList.toggle('hidden', !isAdmin);
+      }
+    } else {
+      if (adminConfirmBtn) adminConfirmBtn.classList.add('hidden');
+      if (adminQuickLink) adminQuickLink.classList.add('hidden');
     }
   }
 
@@ -355,12 +378,15 @@
 
     const fullNameEl = document.getElementById('regFullName');
     const emailEl = document.getElementById('regEmail');
+    const phoneEl = document.getElementById('regPhoneNumber');
     const passEl = document.getElementById('regPassword');
     const confirmEl = document.getElementById('regPasswordConfirm');
     const submitBtn = document.getElementById('btnRegisterSubmit');
 
     const full_name = (fullNameEl?.value || '').trim();
     const email = (emailEl?.value || '').trim().toLowerCase();
+    const rawPhone = (phoneEl?.value || '').trim();
+    const phone_number = normalizePhone(rawPhone);
     const password = passEl?.value || '';
     const password_confirmation = confirmEl?.value || '';
 
@@ -372,6 +398,11 @@
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       renderAuthError('registerFeedback', 'Masukkan alamat email yang valid.');
       emailEl?.focus();
+      return;
+    }
+    if (!isValidPhone(phone_number)) {
+      renderAuthError('registerFeedback', 'Nomor HP tidak valid. Gunakan format Indonesia/internasional, contoh: 081234567890 atau +6281234567890.');
+      phoneEl?.focus();
       return;
     }
     if (password.length < 8) {
@@ -395,6 +426,7 @@
       const resp = await global.SumutGoApi.auth.register({
         full_name,
         email,
+        phone_number,
         password,
         password_confirmation,
       });
@@ -532,5 +564,7 @@
     logout,
     showToast,
     getRoleBadgeMeta,
+    normalizePhone,
+    isValidPhone,
   };
 })(window);

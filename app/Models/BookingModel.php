@@ -43,6 +43,8 @@ class BookingModel extends Model
             ->get()
             ->getResultArray();
 
+        $items = array_map([$this, 'formatBookingRow'], $items);
+
         return [
             'items' => $items,
             'meta'  => [
@@ -59,10 +61,28 @@ class BookingModel extends Model
      */
     public function getBookingDetail(int $bookingId): ?array
     {
-        return $this->db->table('vw_bookings_detail')
+        $row = $this->db->table('vw_bookings_detail')
             ->where('booking_id', $bookingId)
             ->get()
             ->getRowArray();
+
+        return is_array($row) ? $this->formatBookingRow($row) : null;
+    }
+
+    /**
+     * Normalize PostgreSQL types on booking detail view rows
+     */
+    private function formatBookingRow(array $row): array
+    {
+        foreach (['booking_id', 'tourist_id', 'guide_id', 'destination_id', 'transport_id', 'duration_days', 'daily_rate_idr', 'total_price_idr', 'number_of_guests', 'version', 'contact_count'] as $intKey) {
+            if (array_key_exists($intKey, $row) && $row[$intKey] !== null) {
+                $row[$intKey] = (int) $row[$intKey];
+            }
+        }
+        if (array_key_exists('tourist_verified', $row)) {
+            $row['tourist_verified'] = UserModel::toPgBool($row['tourist_verified']);
+        }
+        return $row;
     }
 
     /**
