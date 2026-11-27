@@ -428,36 +428,6 @@
     renderDirectory();
   }
 
-  function exportFilteredCsv() {
-    const list = getFilteredGuides();
-    if (!list.length) return;
-    const authed = isLoggedIn();
-    const headers = ['ID', 'Nama', 'Agensi', 'Spesialisasi', 'Rating', 'Ulasan', 'Kecamatan', 'Alamat', 'Telepon', 'Tarif/Hari', 'Status', 'Bahasa', 'Destinasi', 'Kuliner', 'Hotel', 'Transportasi'];
-    const csvCell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const rows = list.map((g) => [
-      g.id, g.name, g.agency, g.specialization, g.rating, g.reviews,
-      formatDistrict(g.district),
-      authed ? g.address : '[Login untuk detail alamat]',
-      authed ? g.phone : '[Login untuk kontak]',
-      g.price, g.status,
-      getLangNames(g).join('; '),
-      `${g.destId} ${g.destName}`,
-      authed ? `${g.culinaryId} ${g.culinaryName}` : '[Login untuk detail]',
-      authed ? `${g.hotelId} ${g.hotelName}` : '[Login untuk detail]',
-      authed ? `${g.transportId} ${g.transportName}` : '[Login untuk detail]',
-    ].map(csvCell).join(','));
-    const csvContent = '\uFEFF' + [headers.map(csvCell).join(','), ...rows].join('\r\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'sumutgo-pemandu-medan.csv';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  }
-
   // =========================================================================
   // PETA GIS BASECAMP (LEAFLET)
   // =========================================================================
@@ -2351,7 +2321,6 @@
       state.viewMode = 'table';
       renderDirectory();
     });
-    document.getElementById('btnExportCsvFiltered')?.addEventListener('click', exportFilteredCsv);
 
     const filterBindings = [
       ['filterSearch', 'search', 'input'],
