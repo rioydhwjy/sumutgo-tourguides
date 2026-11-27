@@ -2,8 +2,6 @@
 
 namespace App\Libraries;
 
-use Exception;
-
 class JwtService
 {
     private string $secret;

@@ -31,7 +31,7 @@ class AuthController extends BaseApiController
         }
 
         if (! $this->validateData($payload, $rules)) {
-            return $this->respondError('Validasi formulir pendaftaran gagal.', 422, $this->validator->getErrors());
+            return $this->respondError('Validasi formulir pendaftaran gagal.', 422, $this->getValidationErrors());
         }
 
         $normalizedPhone = PhoneNormalizer::normalize((string) ($payload['phone_number'] ?? ''));

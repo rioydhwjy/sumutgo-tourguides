@@ -67,7 +67,7 @@ class BookingContactController extends BaseApiController
         ];
 
         if (! $this->validateData($payload, $rules)) {
-            return $this->respondError('Validasi data kontak/pesan booking gagal.', 422, $this->validator->getErrors());
+            return $this->respondError('Validasi data kontak/pesan booking gagal.', 422, $this->getValidationErrors());
         }
 
         $bookingId = (int) $payload['booking_id'];
@@ -144,7 +144,7 @@ class BookingContactController extends BaseApiController
         ];
 
         if (! $this->validateData($payload, $rules)) {
-            return $this->respondError('Validasi status konfirmasi admin gagal.', 422, $this->validator->getErrors());
+            return $this->respondError('Validasi status konfirmasi admin gagal.', 422, $this->getValidationErrors());
         }
 
         $status    = strtolower(trim((string) $payload['confirmation_status']));

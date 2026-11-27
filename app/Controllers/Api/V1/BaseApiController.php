@@ -6,11 +6,15 @@ use App\Controllers\BaseController;
 use App\Libraries\AuthContext;
 use App\Traits\ApiResponseTrait;
 use CodeIgniter\Database\BaseConnection;
+use CodeIgniter\HTTP\IncomingRequest;
 use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 use Config\Database;
 use Psr\Log\LoggerInterface;
 
+/**
+ * @property IncomingRequest $request
+ */
 abstract class BaseApiController extends BaseController
 {
     use ApiResponseTrait;
@@ -43,9 +47,14 @@ abstract class BaseApiController extends BaseController
         return [];
     }
 
+    protected function getValidationErrors(): array
+    {
+        return $this->validator !== null ? $this->validator->getErrors() : [];
+    }
+
     protected function getCurrentUser(): ?array
     {
-        return AuthContext::getUser() ?? ($this->request->user ?? null);
+        return AuthContext::getUser();
     }
 
     protected function getCurrentUserId(): ?int

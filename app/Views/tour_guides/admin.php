@@ -1,19 +1,28 @@
 <?php
-$totalGuides = count($guides ?? []);
-$availableGuides = (int) ($stats['available_guides'] ?? count(array_filter($guides ?? [], static fn ($g) => ($g['status'] ?? '') === 'Tersedia')));
-$bookedGuides = (int) ($stats['booked_guides'] ?? count(array_filter($guides ?? [], static fn ($g) => ($g['status'] ?? '') === 'Booked')));
-$onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides ?? [], static fn ($g) => ($g['status'] ?? '') === 'Sedang Bertugas')));
+/**
+ * @var string $title
+ * @var array<int, array<string, mixed>> $guides
+ * @var array<string, mixed> $stats
+ */
+$title = $title ?? 'SumutGO — Portal Admin, Live API & SQL';
+$guides = $guides ?? [];
+$stats = $stats ?? [];
+
+$totalGuides = count($guides);
+$availableGuides = (int) ($stats['available_guides'] ?? count(array_filter($guides, static fn ($g) => ($g['status'] ?? '') === 'Tersedia')));
+$bookedGuides = (int) ($stats['booked_guides'] ?? count(array_filter($guides, static fn ($g) => ($g['status'] ?? '') === 'Booked')));
+$onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, static fn ($g) => ($g['status'] ?? '') === 'Sedang Bertugas')));
 ?>
 <!DOCTYPE html>
 <html lang="id">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><?= esc($title ?? 'SumutGO — Portal Admin, Live API & SQL') ?></title>
+  <title><?= esc($title) ?></title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@600;700;800&amp;display=swap" rel="stylesheet">
   <script>
     tailwind.config = {
       theme: {
@@ -175,18 +184,26 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides ??
       $scriptDir = '';
   }
   $apiV1PathPrefix = $scriptDir . '/index.php/api/v1';
+  $adminBootstrapPayload = [
+      'config' => [
+          'apiV1BaseUrl' => $apiV1PathPrefix,
+          'siteUrl'      => $scriptDir !== '' ? $scriptDir : '/',
+      ],
+      'guides'      => $guides,
+      'apiBaseUrl'  => rtrim(site_url('api/tour-guides'), '/'),
+      'apiV1Guides' => rtrim(site_url('api/v1/guides'), '/'),
+  ];
 ?>
+  <script id="sumutgo-admin-data" type="application/json"><?= json_encode($adminBootstrapPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?></script>
   <script>
-    window.SUMUTGO_CONFIG = {
-      apiV1BaseUrl: <?= json_encode($apiV1PathPrefix) ?>,
-      siteUrl: <?= json_encode($scriptDir !== '' ? $scriptDir : '/') ?>
-    };
+    const ADMIN_BOOTSTRAP = JSON.parse(document.getElementById('sumutgo-admin-data')?.textContent || '{}');
+    window.SUMUTGO_CONFIG = ADMIN_BOOTSTRAP.config || {};
   </script>
   <script src="<?= esc($scriptDir . '/assets/js/api.js') ?>?v=<?= filemtime(FCPATH . 'assets/js/api.js') ?>"></script>
   <script>
-    const TOUR_GUIDES = <?= json_encode($guides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>;
-    const API_BASE_URL = '<?= rtrim(site_url('api/tour-guides'), '/') ?>';
-    const API_V1_GUIDES = '<?= rtrim(site_url('api/v1/guides'), '/') ?>';
+    const TOUR_GUIDES = Array.isArray(ADMIN_BOOTSTRAP.guides) ? ADMIN_BOOTSTRAP.guides : [];
+    const API_BASE_URL = ADMIN_BOOTSTRAP.apiBaseUrl || '/api/tour-guides';
+    const API_V1_GUIDES = ADMIN_BOOTSTRAP.apiV1Guides || '/api/v1/guides';
     const escapeHtml = v => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
 
     function updateKpis() {

@@ -111,7 +111,7 @@ class BookingController extends BaseApiController
         ];
 
         if (! $this->validateData($payload, $rules)) {
-            return $this->respondError('Validasi data reservasi gagal.', 422, $this->validator->getErrors());
+            return $this->respondError('Validasi data reservasi gagal.', 422, $this->getValidationErrors());
         }
 
         // Validate date order

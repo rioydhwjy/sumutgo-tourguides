@@ -8,7 +8,6 @@ use App\Controllers\Api\V1\AnalyticsController;
 use App\Controllers\Api\V1\AuthController;
 use App\Controllers\Api\V1\BookingController;
 use App\Controllers\Api\V1\GuideController;
-use App\Controllers\Api\V1\MasterDataController;
 use App\Controllers\Api\V1\ReviewController;
 use App\Filters\JwtAuthFilter;
 use App\Filters\RoleFilter;

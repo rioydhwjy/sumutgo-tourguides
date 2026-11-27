@@ -24,7 +24,7 @@ class RoleFilter implements FilterInterface
             }
         }
 
-        $user = AuthContext::getUser() ?? ($request->user ?? null);
+        $user = AuthContext::getUser();
         $currentRole = strtolower(trim((string) ($user['role'] ?? '')));
 
         if (! in_array($currentRole, $allowed, true)) {

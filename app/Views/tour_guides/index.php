@@ -1,13 +1,34 @@
 <?php
-$totalGuides = count($guides ?? []);
-$availableGuides = (int) ($stats['available_guides'] ?? count(array_filter($guides ?? [], static fn ($g) => ($g['status'] ?? '') === 'Tersedia')));
-$totalReviews = array_sum(array_map(static fn ($g) => (int) ($g['reviews'] ?? 0), $guides ?? []));
+/**
+ * @var string $title
+ * @var array<int, array<string, mixed>> $guides
+ * @var array<string, mixed> $stats
+ * @var array<int, array<string, mixed>> $specializations
+ * @var array<int, array<string, mixed>> $languages
+ * @var array<int, array<string, mixed>> $destinations
+ * @var array<int, array<string, mixed>> $culinaries
+ * @var array<int, array<string, mixed>> $hotels
+ * @var array<int, array<string, mixed>> $transports
+ */
+$title = $title ?? 'SumutGO | Pemandu Wisata Lokal Medan, Menemani Perjalananmu';
+$guides = $guides ?? [];
+$stats = $stats ?? [];
+$specializations = $specializations ?? [];
+$languages = $languages ?? [];
+$destinations = $destinations ?? [];
+$culinaries = $culinaries ?? [];
+$hotels = $hotels ?? [];
+$transports = $transports ?? [];
+
+$totalGuides = count($guides);
+$availableGuides = (int) ($stats['available_guides'] ?? count(array_filter($guides, static fn ($g) => ($g['status'] ?? '') === 'Tersedia')));
+$totalReviews = array_sum(array_map(static fn ($g) => (int) ($g['reviews'] ?? 0), $guides));
 $avgRatingFormatted = number_format((float) ($stats['avg_rating'] ?? 4.73), 2, '.', '');
-$totalLanguages = count($languages ?? []);
-$totalSpecs = count($specializations ?? []);
-$districtList = array_values(array_unique(array_filter(array_map(static fn ($g) => (string) ($g['district'] ?? ''), $guides ?? []), static fn ($d) => $d !== '' && $d !== 'Kota Medan' && $d !== 'Medan')));
+$totalLanguages = count($languages);
+$totalSpecs = count($specializations);
+$districtList = array_values(array_unique(array_filter(array_map(static fn ($g) => (string) ($g['district'] ?? ''), $guides), static fn ($d) => $d !== '' && $d !== 'Kota Medan' && $d !== 'Medan')));
 $districtCount = count($districtList) ?: 15;
-$prices = array_column($guides ?? [], 'price');
+$prices = array_column($guides, 'price');
 $minGuidePrice = ! empty($prices) ? (int) (floor(min($prices) / 25000) * 25000) : 250000;
 $maxGuidePrice = ! empty($prices) ? (int) (ceil(max($prices) / 25000) * 25000) : 850000;
 $lastGuideCode = ! empty($guides) ? (string) ($guides[count($guides) - 1]['id'] ?? 'TG-150') : 'TG-150';
@@ -18,11 +39,11 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title><?= esc($title ?? 'SumutGO | Pemandu Wisata Lokal Medan, Menemani Perjalananmu') ?></title>
+  <title><?= esc($title) ?></title>
   <script src="https://cdn.tailwindcss.com/3.4.17"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;family=JetBrains+Mono:wght@400;500;600&amp;family=Plus+Jakarta+Sans:wght@500;600;700;800&amp;display=swap" rel="stylesheet">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -1072,21 +1093,23 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
       $scriptDir = '';
   }
   $apiPathPrefix = $scriptDir . '/index.php/api/v1';
+  $bootstrapPayload = [
+      'apiV1BaseUrl'    => $apiPathPrefix,
+      'siteUrl'         => $scriptDir !== '' ? $scriptDir : '/',
+      'defaultMaxPrice' => (int) $maxGuidePrice,
+      'defaultBookDate' => $defaultBookDate,
+      'initialGuides'   => $guides,
+      'masterEcosystem' => [
+          'destinations' => $destinations,
+          'culinaries'   => $culinaries,
+          'hotels'       => $hotels,
+          'transports'   => $transports,
+      ],
+  ];
 ?>
+  <script id="sumutgo-bootstrap-data" type="application/json"><?= json_encode($bootstrapPayload, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?></script>
   <script>
-    window.SUMUTGO_CONFIG = {
-      apiV1BaseUrl: <?= json_encode($apiPathPrefix) ?>,
-      siteUrl: <?= json_encode($scriptDir !== '' ? $scriptDir : '/') ?>,
-      defaultMaxPrice: <?= (int) $maxGuidePrice ?>,
-      defaultBookDate: <?= json_encode($defaultBookDate) ?>,
-      initialGuides: <?= json_encode($guides, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>,
-      masterEcosystem: <?= json_encode([
-          'destinations' => $destinations ?? [],
-          'culinaries'   => $culinaries ?? [],
-          'hotels'       => $hotels ?? [],
-          'transports'   => $transports ?? [],
-      ], JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) ?>
-    };
+    window.SUMUTGO_CONFIG = JSON.parse(document.getElementById('sumutgo-bootstrap-data')?.textContent || '{}');
   </script>
   <script src="<?= esc($scriptDir . '/assets/js/api.js') ?>?v=<?= filemtime(FCPATH . 'assets/js/api.js') ?>"></script>
   <script src="<?= esc($scriptDir . '/assets/js/auth.js') ?>?v=<?= filemtime(FCPATH . 'assets/js/auth.js') ?>"></script>

@@ -48,7 +48,7 @@ class ReviewController extends BaseApiController
         ];
 
         if (! $this->validateData($payload, $rules)) {
-            return $this->respondError('Validasi data ulasan gagal.', 422, $this->validator->getErrors());
+            return $this->respondError('Validasi data ulasan gagal.', 422, $this->getValidationErrors());
         }
 
         $bookingId = (int) $payload['booking_id'];

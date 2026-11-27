@@ -10,7 +10,7 @@ $routes->get('tour-guides', 'TourGuideController::index');
 $routes->get('admin', 'TourGuideController::admin');
 
 // Legacy API endpoints (backward compatibility)
-$routes->group('api', ['namespace' => 'App\Controllers\Api'], static function ($routes) {
+$routes->group('api', ['namespace' => 'App\Controllers\Api'], static function (RouteCollection $routes): void {
     $routes->get('tour-guides', 'TourGuideApiController::index');
     $routes->get('tour-guides/stats', 'TourGuideApiController::stats');
     $routes->get('tour-guides/(:segment)', 'TourGuideApiController::show/$1');
@@ -21,10 +21,10 @@ $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function ($
 // ====================================================================
 // RESTful Web API v1 (CodeIgniter 4.7 + PostgreSQL 17 Supabase)
 // ====================================================================
-$routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1'], static function ($routes) {
+$routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1'], static function (RouteCollection $routes): void {
 
     // 1. Authentication (Shared between Web Admin & Flutter Mobile)
-    $routes->group('auth', static function ($routes) {
+    $routes->group('auth', static function (RouteCollection $routes): void {
         $routes->post('register', 'AuthController::register', ['filter' => 'ratelimit:15,60']);
         $routes->post('login', 'AuthController::login', ['filter' => 'ratelimit:15,60']);
         $routes->get('me', 'AuthController::me', ['filter' => 'jwt']);
@@ -32,7 +32,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1'], static funct
     });
 
     // 2. Master Data (6 Tables: specializations, languages, destinations, culinaries, hotels, transports)
-    $routes->group('master', static function ($routes) {
+    $routes->group('master', static function (RouteCollection $routes): void {
         $routes->get('all', 'MasterDataController::all');
         $routes->get('(:segment)', 'MasterDataController::index/$1');
         $routes->get('(:segment)/(:num)', 'MasterDataController::show/$1/$2');
@@ -42,7 +42,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1'], static funct
     });
 
     // 3. Tour Guides Catalog & Management (with Optimistic Locking & Audit Trail)
-    $routes->group('guides', static function ($routes) {
+    $routes->group('guides', static function (RouteCollection $routes): void {
         $routes->get('', 'GuideController::index');
         $routes->get('(:segment)', 'GuideController::show/$1');
         $routes->post('', 'GuideController::create', ['filter' => ['jwt', 'role:admin']]);
@@ -51,7 +51,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1'], static funct
     });
 
     // 4. Bookings (Transactional Stored Functions & Double-Booking Protection)
-    $routes->group('bookings', static function ($routes) {
+    $routes->group('bookings', static function (RouteCollection $routes): void {
         $routes->get('', 'BookingController::index', ['filter' => 'jwt']);
         $routes->get('(:num)', 'BookingController::show/$1', ['filter' => 'jwt']);
         $routes->post('', 'BookingController::create', ['filter' => ['jwt', 'role:wisatawan,admin']]);
@@ -59,19 +59,19 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1'], static funct
     });
 
     // 5. Booking Contacts / Inquiries & Admin Verification
-    $routes->group('booking-contacts', static function ($routes) {
+    $routes->group('booking-contacts', static function (RouteCollection $routes): void {
         $routes->get('', 'BookingContactController::index', ['filter' => 'jwt']);
         $routes->post('', 'BookingContactController::create', ['filter' => 'jwt']);
         $routes->patch('(:num)/confirm', 'BookingContactController::confirm/$1', ['filter' => ['jwt', 'role:admin']]);
     });
 
-    $routes->group('users', static function ($routes) {
+    $routes->group('users', static function (RouteCollection $routes): void {
         $routes->get('', 'UserController::index', ['filter' => ['jwt', 'role:admin']]);
         $routes->patch('(:num)/verify', 'UserController::verify/$1', ['filter' => ['jwt', 'role:admin']]);
     });
 
     // 6. Reviews (Triggers Business Guard: Completed Bookings Only)
-    $routes->group('reviews', static function ($routes) {
+    $routes->group('reviews', static function (RouteCollection $routes): void {
         $routes->get('', 'ReviewController::index');
         $routes->post('', 'ReviewController::create', ['filter' => ['jwt', 'role:wisatawan']]);
     });

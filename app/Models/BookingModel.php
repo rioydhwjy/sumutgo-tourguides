@@ -134,7 +134,7 @@ class BookingModel extends Model
         $created = $query->getRowArray();
         $bookingId = (int) ($created['booking_id'] ?? 0);
 
-        return $this->getBookingDetail($bookingId) ?? $created;
+        return $this->getBookingDetail($bookingId) ?? $created ?? [];
     }
 
     /**
@@ -152,6 +152,6 @@ class BookingModel extends Model
         $query = $this->db->query($sql, [$bookingId, trim($newStatus), $expectedVersion, $changedBy ?? 1, $reason]);
         $updated = $query->getRowArray();
 
-        return $this->getBookingDetail($bookingId) ?? $updated;
+        return $this->getBookingDetail($bookingId) ?? $updated ?? [];
     }
 }
