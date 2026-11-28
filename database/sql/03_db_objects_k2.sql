@@ -34,6 +34,14 @@ guide_revs AS (
     FROM bookings b
     JOIN reviews r ON r.booking_id = b.booking_id
     GROUP BY b.guide_id
+),
+active_bookings AS (
+    SELECT
+        guide_id,
+        MAX(end_date) AS active_booking_end_date
+    FROM bookings
+    WHERE status IN ('confirmed', 'ongoing')
+    GROUP BY guide_id
 )
 SELECT 
     g.guide_id,
@@ -69,7 +77,8 @@ SELECT
     COALESCE(gl.languages_json, '[]'::jsonb) AS languages_json,
     COALESCE(gl.spoken_languages, '') AS spoken_languages,
     COALESCE(gr.internal_avg_rating, 0.0) AS internal_avg_rating,
-    COALESCE(gr.internal_review_count, 0) AS internal_review_count
+    COALESCE(gr.internal_review_count, 0) AS internal_review_count,
+    ab.active_booking_end_date
 FROM guides g
 LEFT JOIN users u ON u.user_id = g.user_id
 LEFT JOIN tour_specializations ts ON ts.specialization_id = g.specialization_id
@@ -78,7 +87,8 @@ LEFT JOIN culinaries c ON c.culinary_id = g.recommended_culinary_id
 LEFT JOIN hotels h ON h.hotel_id = g.partner_hotel_id
 LEFT JOIN transports t ON t.transport_id = g.default_transport_id
 LEFT JOIN guide_langs gl ON gl.guide_id = g.guide_id
-LEFT JOIN guide_revs gr ON gr.guide_id = g.guide_id;
+LEFT JOIN guide_revs gr ON gr.guide_id = g.guide_id
+LEFT JOIN active_bookings ab ON ab.guide_id = g.guide_id;
 
 -- View 2: vw_bookings_detail
 -- Menggabungkan data bookings dengan pemesan, pemandu, destinasi, transportasi, durasi & total harga, dan review

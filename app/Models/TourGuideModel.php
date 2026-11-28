@@ -480,6 +480,9 @@ class TourGuideModel extends Model
                 'avg_rating'   => $r['internal_avg_rating'] !== null ? (float) $r['internal_avg_rating'] : null,
                 'review_count' => (int) ($r['internal_review_count'] ?? 0),
             ],
+            'active_booking_end_date' => isset($r['active_booking_end_date']) && $r['active_booking_end_date'] !== null
+                ? (string) $r['active_booking_end_date']
+                : null,
         ];
     }
 }

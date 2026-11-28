@@ -62,6 +62,40 @@
 
   const DEFAULT_BOOK_START = cfg.defaultBookDate || addDaysYmd(getTodayYmd(), 1);
 
+  // =========================================================================
+  // COMPARE LIST — PER-USER STORAGE (localStorage key terikat user_id aktif)
+  // =========================================================================
+  function getCompareStorageKey() {
+    const user = global.SumutGoAuth && global.SumutGoAuth.getUser ? global.SumutGoAuth.getUser() : null;
+    if (!user || (!user.user_id && !user.id)) return null;
+    const uid = user.user_id || user.id;
+    return `sumutgo_compare_u${uid}`;
+  }
+
+  function saveCompareList() {
+    const key = getCompareStorageKey();
+    if (!key) return;
+    try {
+      localStorage.setItem(key, JSON.stringify(state.compareList));
+    } catch (_) {}
+  }
+
+  function loadCompareList() {
+    const key = getCompareStorageKey();
+    if (!key) {
+      state.compareList = [];
+      return;
+    }
+    try {
+      const raw = localStorage.getItem(key);
+      state.compareList = raw
+        ? JSON.parse(raw).filter(function (id) { return typeof id === 'string'; })
+        : [];
+    } catch (_) {
+      state.compareList = [];
+    }
+  }
+
   const state = {
     activeTab: 'directory',
     viewMode: 'cards',
@@ -74,7 +108,7 @@
     maxPrice: DEFAULT_MAX_PRICE,
     onlyFavorites: false,
     favorites: new Set(['TG-001', 'TG-013']),
-    compareList: ['TG-001', 'TG-013'],
+    compareList: [],
     activeGuideId: 'TG-001',
     activeGuideDetail: null,
     refLat: 3.5612,
@@ -285,6 +319,9 @@
               <div class="flex items-center gap-1.5 shrink-0">
                 <button type="button" data-fav-btn="${escapeHtml(g.id)}" aria-label="Favorit ${escapeHtml(g.name)}" class="w-7 h-7 rounded-full border text-xs transition ${state.favorites.has(g.id) ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500'}">♥</button>
                 <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+                ${(g.active_booking_end_date && (g.status === 'Sedang Bertugas' || g.status === 'Booked'))
+                  ? `<span class="text-[10px] text-amber-600 font-semibold block mt-0.5">s.d. ${escapeHtml(formatDateId(g.active_booking_end_date))}</span>`
+                  : ''}
               </div>
             </div>
             <h3 class="font-display font-bold text-base text-ink">${escapeHtml(g.name)}</h3>
@@ -352,7 +389,7 @@
             }
           </td>
           <td class="py-3 px-3 font-mono font-bold text-lokale whitespace-nowrap">${formatIdr(g.price)}</td>
-          <td class="py-3 px-3 whitespace-nowrap"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span></td>
+          <td class="py-3 px-3 whitespace-nowrap"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>${(g.active_booking_end_date && (g.status === 'Sedang Bertugas' || g.status === 'Booked')) ? `<span class="block text-[10px] text-amber-600 font-semibold mt-0.5">s.d. ${escapeHtml(formatDateId(g.active_booking_end_date))}</span>` : ''}</td>
           <td class="py-3 px-3 text-right whitespace-nowrap">
             <div class="inline-flex gap-1">
               <button type="button" data-open-guide="${escapeHtml(g.id)}" class="px-3 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[11px] font-semibold transition">Detail</button>
@@ -389,13 +426,36 @@
     });
     document.querySelectorAll('[data-comp-btn]').forEach((b) => {
       b.addEventListener('click', () => {
-        const i = state.compareList.indexOf(b.dataset.compBtn);
-        if (i >= 0) state.compareList.splice(i, 1);
-        else {
-          if (state.compareList.length >= 3) state.compareList.shift();
-          state.compareList.push(b.dataset.compBtn);
+        const id = b.dataset.compBtn;
+        const idx = state.compareList.indexOf(id);
+        if (idx >= 0) {
+          // Sudah ada di daftar pembanding → hapus
+          state.compareList.splice(idx, 1);
+          saveCompareList();
+          renderDirectory();
+        } else {
+          // Belum login → arahkan ke login
+          if (!isLoggedIn()) {
+            global.SumutGoAuth.openAuthModal(
+              'login',
+              'Masuk untuk menggunakan fitur pembanding pemandu wisata.'
+            );
+            return;
+          }
+          // Sudah ada 3 → blokir, tampilkan notifikasi & buka modal pembanding
+          if (state.compareList.length >= 3) {
+            global.SumutGoAuth.showToast(
+              'Daftar pembanding penuh (maks. 3 pemandu). Hapus salah satu terlebih dahulu.',
+              'error'
+            );
+            openCompareModal();
+            return;
+          }
+          // Tambah ke daftar
+          state.compareList.push(id);
+          saveCompareList();
+          renderDirectory();
         }
-        renderDirectory();
       });
     });
   }
@@ -1095,6 +1155,21 @@
     state.activeGuideDetail = g;
 
     document.getElementById('modalGuideId').textContent = `${g.id} • ${g.status}`;
+    if (g.active_booking_end_date && (g.status === 'Sedang Bertugas' || g.status === 'Booked')) {
+      let dutyEl = document.getElementById('modalGuideDutyUntil');
+      if (!dutyEl) {
+        dutyEl = document.createElement('span');
+        dutyEl.id = 'modalGuideDutyUntil';
+        dutyEl.className = 'ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold';
+        const refEl = document.getElementById('modalGuideId');
+        if (refEl && refEl.parentNode) refEl.parentNode.appendChild(dutyEl);
+      }
+      dutyEl.textContent = `Bertugas s.d. ${formatDateId(g.active_booking_end_date)}`;
+      dutyEl.classList.remove('hidden');
+    } else {
+      const dutyEl = document.getElementById('modalGuideDutyUntil');
+      if (dutyEl) dutyEl.classList.add('hidden');
+    }
     document.getElementById('modalGuideName').textContent = g.name;
     document.getElementById('modalAgency').textContent = g.agency;
     document.getElementById('modalAddress').textContent = g.address || '-';
@@ -1886,12 +1961,22 @@
     const colClass = items.length === 1 ? 'md:grid-cols-1' : items.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3';
 
     document.getElementById('compareModalBody').innerHTML = items.length
-      ? `<div class="grid grid-cols-1 ${colClass} gap-4">` + items.map((g) => `
+      ? `<div class="grid grid-cols-1 ${colClass} gap-4">` + items.map((g) => {
+          const dutyUntilHtml = (g.active_booking_end_date && (g.status === 'Sedang Bertugas' || g.status === 'Booked'))
+            ? `<div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold">
+                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                Bertugas s.d. ${escapeHtml(formatDateId(g.active_booking_end_date))}
+              </div>`
+            : '';
+          return `
           <div class="bg-lokalesoft/50 border border-lokaleborder rounded-2xl p-4 space-y-1.5 flex flex-col justify-between">
             <div class="space-y-1.5">
               <div class="flex items-center justify-between gap-2">
                 <strong class="text-lokale font-mono">${escapeHtml(g.id)}</strong>
-                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+                <div class="flex flex-col items-end gap-0.5">
+                  <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+                  ${dutyUntilHtml}
+                </div>
               </div>
               <h4 class="font-bold text-base text-ink">${escapeHtml(g.name)}</h4>
               <div class="text-muted">${escapeHtml(g.specialization)}</div>
@@ -1909,14 +1994,28 @@
                 ${authed ? '' : '<div class="mt-1 text-[10px] font-bold text-lokale">🔒 Masuk untuk membuka rincian mitra &amp; kontak</div>'}
               </div>
             </div>
-            <button type="button" data-compare-detail="${escapeHtml(g.id)}" class="mt-3 w-full py-1.5 rounded-full bg-lokale text-white font-semibold text-[11px]">Lihat Detail &amp; Booking</button>
-          </div>`).join('') + `</div>`
+            <div class="mt-3 flex flex-col gap-1.5">
+              <button type="button" data-compare-detail="${escapeHtml(g.id)}" class="w-full py-1.5 rounded-full bg-lokale text-white font-semibold text-[11px]">Lihat Detail &amp; Booking</button>
+              <button type="button" data-compare-remove="${escapeHtml(g.id)}" class="w-full py-1.5 rounded-full bg-white border border-lokaleborder text-rose-600 hover:bg-rose-50 font-semibold text-[11px] transition">✕ Hapus dari Pembanding</button>
+            </div>
+          </div>`;
+        }).join('') + `</div>`
       : '<p class="text-center py-6 text-muted">Klik tombol + Banding pada kartu pemandu untuk membandingkan.</p>';
 
     document.querySelectorAll('[data-compare-detail]').forEach((b) => {
       b.addEventListener('click', () => {
         document.getElementById('compareModal')?.classList.add('hidden');
         openGuideModal(b.dataset.compareDetail, 'detail');
+      });
+    });
+
+    document.querySelectorAll('[data-compare-remove]').forEach((b) => {
+      b.addEventListener('click', () => {
+        const idx = state.compareList.indexOf(b.dataset.compareRemove);
+        if (idx >= 0) state.compareList.splice(idx, 1);
+        saveCompareList();
+        openCompareModal();
+        renderDirectory();
       });
     });
 
@@ -2230,6 +2329,13 @@
   }
 
   function onAuthStateChanged(_user, authed, meta = {}) {
+    // 0. Sinkronkan daftar pembanding dengan akun yang sedang login/logout
+    if (authed) {
+      loadCompareList(); // Muat daftar pembanding milik akun yang baru login
+    } else {
+      state.compareList = []; // Bersihkan saat logout (kunci di-generate dari user_id, tidak bocor ke akun lain)
+    }
+
     // 1. Segera update Direktori (menghilangkan atau mengembalikan Blur Gate secara instan)
     renderDirectory();
 
