@@ -76,11 +76,11 @@ class ReviewModel extends Model
             ->getRowArray();
 
         if (! $booking) {
-            throw new \CodeIgniter\Database\Exceptions\DatabaseException("Booking dengan ID {$bookingId} tidak ditemukan.");
+            throw new \DomainException("Booking dengan ID {$bookingId} tidak ditemukan.", 404);
         }
 
         if ((int) $booking['tourist_id'] !== $touristId) {
-            throw new \CodeIgniter\Database\Exceptions\DatabaseException("Akses ditolak: Anda hanya dapat memberikan ulasan untuk booking milik sendiri.");
+            throw new \DomainException("Akses ditolak: Anda hanya dapat memberikan ulasan untuk booking milik sendiri.", 403);
         }
 
         // 2. Insert into reviews (will trigger trg_reviews_only_completed and unique check uq_reviews_booking)

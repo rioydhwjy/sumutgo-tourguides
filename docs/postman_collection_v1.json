@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a9c2f6d8-3b1e-4589-9d7a-18f3a5b89021",
     "name": "SumutGo Tour Guides - RESTful Web API v1",
-    "description": "Dokumentasi RESTful Web API v1 SumutGo Tour Guides (CodeIgniter 4.7 + PostgreSQL 17 Supabase). Dilengkapi JWT HS256, RBAC, Rate Limiting, Optimistic Locking, dan Error Mapping.",
+    "description": "Dokumentasi lengkap RESTful Web API v1 SumutGo Tour Guides (CodeIgniter 4.7 + PostgreSQL 17 Supabase + Proxy Transport Application API). Dilengkapi JWT HS256, RBAC, Rate Limiting, Optimistic Locking, Exclusion Constraint anti double-booking, Error Mapping, Booking Contacts, Verifikasi User, dan Proxy Transport API.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -194,6 +194,25 @@
               "path": ["api", "v1", "master", "destinations"]
             }
           }
+        },
+        {
+          "name": "Update Destinasi (Admin)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"destination_name\": \"Air Terjun Sipiso-piso Tongging\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/master/destinations/1",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "master", "destinations", "1"]
+            }
+          }
         }
       ]
     },
@@ -341,7 +360,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"guide_id\": 2,\n  \"start_date\": \"2026-12-01\",\n  \"end_date\": \"2026-12-03\",\n  \"number_of_guests\": 2,\n  \"destination_id\": 1,\n  \"transport_id\": 1\n}"
+              "raw": "{\n  \"guide_id\": 2,\n  \"start_date\": \"2026-12-01\",\n  \"end_date\": \"2026-12-03\",\n  \"number_of_guests\": 2,\n  \"destination_id\": 1,\n  \"transport_id\": 1,\n  \"meeting_point\": \"Lobi Hotel JW Marriott Medan\",\n  \"notes\": \"Penjemputan pukul 08.00 WIB\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/bookings",
@@ -372,7 +391,110 @@
       ]
     },
     {
-      "name": "05. Reviews",
+      "name": "05. Booking Contacts & Inquiries",
+      "item": [
+        {
+          "name": "List Kontak & Pesan Booking (Role Scoped)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{tourist_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/booking-contacts?page=1&per_page=20",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "booking-contacts"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Kirim Pesan / Kontak Konfirmasi Booking",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{tourist_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"booking_id\": 1,\n  \"inquiry_message\": \"Halo, mohon konfirmasi titik jemput di Stasiun Medan pukul 08.00 WIB.\",\n  \"preferred_channel\": \"whatsapp\",\n  \"contact_phone\": \"08126001001\",\n  \"contact_email\": \"budi@wisatawan.id\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/booking-contacts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "booking-contacts"]
+            }
+          }
+        },
+        {
+          "name": "Konfirmasi Status Kontak Booking (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"confirmation_status\": \"confirmed\",\n  \"admin_note\": \"Sudah dikonfirmasi via WhatsApp ke wisatawan dan pemandu.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/booking-contacts/1/confirm",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "booking-contacts", "1", "confirm"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "06. Users Verification (Admin)",
+      "item": [
+        {
+          "name": "List Pengguna & Status Verifikasi HP (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/users?page=1&per_page=30",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "30" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Verifikasi Akun Pengguna & Nomor HP (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_verified\": true,\n  \"verification_note\": \"Nomor HP aktif dan terverifikasi oleh Admin.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/users/2/verify",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "users", "2", "verify"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "07. Reviews",
       "item": [
         {
           "name": "List Seluruh Ulasan",
@@ -381,7 +503,11 @@
             "url": {
               "raw": "{{base_url}}/api/v1/reviews?page=1&per_page=10",
               "host": ["{{base_url}}"],
-              "path": ["api", "v1", "reviews"]
+              "path": ["api", "v1", "reviews"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "10" }
+              ]
             }
           }
         },
@@ -407,7 +533,7 @@
       ]
     },
     {
-      "name": "06. Analytics & Audit Logs",
+      "name": "08. Analytics & Audit Logs",
       "item": [
         {
           "name": "Log Audit Sistem (Admin Only)",
@@ -419,7 +545,11 @@
             "url": {
               "raw": "{{base_url}}/api/v1/audit-logs?page=1&per_page=20",
               "host": ["{{base_url}}"],
-              "path": ["api", "v1", "audit-logs"]
+              "path": ["api", "v1", "audit-logs"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "per_page", "value": "20" }
+              ]
             }
           }
         },
@@ -431,6 +561,106 @@
               "raw": "{{base_url}}/api/v1/stats",
               "host": ["{{base_url}}"],
               "path": ["api", "v1", "stats"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "09. Transport API Proxy (External Integration)",
+      "item": [
+        {
+          "name": "Status Integrasi Proxy Transport",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/transport/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transport", "status"]
+            }
+          }
+        },
+        {
+          "name": "List Moda Transportasi Eksternal",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/transport/transports",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transport", "transports"]
+            }
+          }
+        },
+        {
+          "name": "Cari Titik Simpul Lokasi Transportasi",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/transport/lokasi?tipe=bandara",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transport", "lokasi"],
+              "query": [
+                { "key": "tipe", "value": "bandara" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Hitung Tarif Antar Simpul Transportasi",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/transport/tarif?id_asal=2&id_tujuan=42&jam=08:00",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transport", "tarif"],
+              "query": [
+                { "key": "id_asal", "value": "2" },
+                { "key": "id_tujuan", "value": "42" },
+                { "key": "jam", "value": "08:00" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Rekomendasi Rute Transportasi ke Wisata",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_lat\": 3.5952,\n  \"user_lng\": 98.6722,\n  \"wisata_lat\": 3.5754,\n  \"wisata_lng\": 98.6838,\n  \"nama_wisata\": \"Istana Maimun Medan\",\n  \"trip_type\": \"roundtrip\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/transport/rekomendasi-wisata",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transport", "rekomendasi-wisata"]
+            }
+          }
+        },
+        {
+          "name": "Master Transport Eksternal Read-Only (moda|lokasi|penyedia|jadwal)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/api/v1/transport/master/moda",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transport", "master", "moda"]
+            }
+          }
+        },
+        {
+          "name": "Admin Transport - List Resource (Admin)",
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_token}}" }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/transport/admin/moda",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "transport", "admin", "moda"]
             }
           }
         }

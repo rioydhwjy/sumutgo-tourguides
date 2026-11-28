@@ -6,6 +6,7 @@ use App\Libraries\DbTransactionRunner;
 use App\Libraries\PgErrorMapper;
 use App\Models\ReviewModel;
 use CodeIgniter\HTTP\ResponseInterface;
+use DomainException;
 use Throwable;
 
 class ReviewController extends BaseApiController
@@ -63,6 +64,9 @@ class ReviewController extends BaseApiController
             });
 
             return $this->respondSuccess($created, 'Ulasan berhasil disimpan.', 201);
+        } catch (DomainException $e) {
+            $statusCode = in_array($e->getCode(), [403, 404], true) ? (int) $e->getCode() : 422;
+            return $this->respondError($e->getMessage(), $statusCode);
         } catch (Throwable $e) {
             return PgErrorMapper::toResponse($e);
         }
