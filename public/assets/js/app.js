@@ -941,6 +941,28 @@
     return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'Simpul';
   }
 
+  function inferTransportNodeType(hub) {
+    const rawType = String(hub?.tipe_lokasi || '').trim().toLowerCase();
+    const name = String(hub?.nama_lokasi || '').toLowerCase();
+    if (/\bbandara\b|\bairport\b/.test(name)) return 'bandara';
+    if (/\bstasiun\b|\bstation\b/.test(name)) return 'stasiun';
+    if (/\bpelabuhan\b|\bdermaga\b|\bport\b/.test(name)) return 'pelabuhan';
+    if (/\bhalte\b/.test(name)) return 'halte';
+    if (/\bterminal\b/.test(name)) return 'terminal';
+    return rawType || 'terminal';
+  }
+
+  function matchesTransportNodeType(hub, filter) {
+    const f = String(filter || 'all').toLowerCase();
+    if (f === 'all' || !f) return true;
+    const rawType = String(hub?.tipe_lokasi || '').trim().toLowerCase();
+    const inferred = inferTransportNodeType(hub);
+    if (f === 'terminal') {
+      return inferred === 'terminal' || (rawType === 'terminal' && !['bandara', 'stasiun', 'pelabuhan', 'halte'].includes(inferred));
+    }
+    return inferred === f || rawType === f;
+  }
+
   function setTransportPanelFeedback(elId, msg, tone = 'info', retryCallback = null) {
     const el = document.getElementById(elId);
     if (!el) return;
@@ -970,12 +992,10 @@
 
     const prevAsal = asalSel.value;
     const prevTujuan = tujuanSel.value;
-    const locs = (state.transport.locations || []).filter((l) => (
-      typeFilter === 'all' || String(l.tipe_lokasi || '').toLowerCase() === typeFilter
-    ));
+    const locs = (state.transport.locations || []).filter((l) => matchesTransportNodeType(l, typeFilter));
 
     const optsHtml = '<option value="">Pilih dari daftar simpul...</option>' + locs.map((l) => {
-      const lbl = `${l.nama_lokasi || 'Simpul'} (${formatTransportTypeLabel(l.tipe_lokasi)})`;
+      const lbl = `${l.nama_lokasi || 'Simpul'} (${formatTransportTypeLabel(inferTransportNodeType(l))})`;
       return `<option value="${escapeHtml(l.id)}">${escapeHtml(lbl)}</option>`;
     }).join('');
 
@@ -1057,13 +1077,13 @@
       const lat = Number(l.latitude);
       const lng = Number(l.longitude);
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-      return typeFilter === 'all' || String(l.tipe_lokasi || '').toLowerCase() === typeFilter;
+      return matchesTransportNodeType(l, typeFilter);
     });
 
     hubs.forEach((hub) => {
       const lat = Number(hub.latitude);
       const lng = Number(hub.longitude);
-      const tipe = formatTransportTypeLabel(hub.tipe_lokasi);
+      const tipe = formatTransportTypeLabel(inferTransportNodeType(hub));
       const nama = hub.nama_lokasi || 'Simpul Transportasi';
       const popupHtml = `<div class="space-y-2 text-xs text-ink">
         <div class="flex items-center justify-between gap-2">
@@ -1196,32 +1216,41 @@
     try {
       const resp = await global.SumutGoApi.transport.tarif(params);
       const data = resp?.data || {};
-      const items = extractTransportArray(data, ['opsi', 'tarif', 'rute', 'routes', 'hasil', 'results']);
-      const fallbackDistance = data.jarak_km ?? data.distance_km ?? data.jarak ?? null;
+      const ruteInfo = (data.rute && !Array.isArray(data.rute) && typeof data.rute === 'object') ? data.rute : null;
+      const items = extractTransportArray(data, ['pilihan_transportasi', 'opsi', 'tarif', 'routes', 'hasil', 'results']);
+      const fallbackDistance = ruteInfo?.jarak_km ?? data.jarak_km ?? data.distance_km ?? data.jarak ?? null;
+      const jamDepart = ruteInfo?.jam_berangkat || jam;
 
       if (!items.length && (data.tarif !== undefined || data.estimasi_tarif !== undefined || data.estimasi_biaya !== undefined || data.harga !== undefined)) {
         items.push(data);
       }
 
+      const asalLabel = ruteInfo?.asal?.nama_lokasi || asalTxt || document.getElementById('tarifAsalSelect')?.selectedOptions?.[0]?.textContent || 'Asal';
+      const tujuanLabel = ruteInfo?.tujuan?.nama_lokasi || tujuanTxt || document.getElementById('tarifTujuanSelect')?.selectedOptions?.[0]?.textContent || 'Tujuan';
+      const distanceHeaderHtml = fallbackDistance !== null && fallbackDistance !== undefined
+        ? `<div class="px-3 py-2 rounded-2xl bg-lokalesoft/50 border border-lokaleborder flex flex-wrap items-center justify-between gap-2 text-[11px]">
+            <span class="font-semibold text-ink">${escapeHtml(asalLabel)} &rarr; ${escapeHtml(tujuanLabel)}</span>
+            <span class="font-mono font-bold text-lokale">Jarak Haversine: ${Number(fallbackDistance).toFixed(2)} km • Jam ${escapeHtml(jamDepart)}</span>
+          </div>`
+        : '';
+
       if (!items.length) {
         if (resEl) {
-          resEl.innerHTML = '<div class="py-5 text-center bg-lokalesoft/30 rounded-2xl border border-lokaleborder text-muted">Belum ditemukan rute atau tarif tersedia untuk kombinasi lokasi dan jam tersebut.</div>';
+          resEl.innerHTML = `${distanceHeaderHtml}<div class="py-4 px-3 text-center bg-lokalesoft/30 rounded-2xl border border-lokaleborder text-muted">Belum ada jadwal armada langsung terjadwal pada jam ${escapeHtml(jamDepart)} untuk rute ini. Coba rute terminal/bandara utama atau gunakan fitur Rekomendasi Rute Wisata di kanan.</div>`;
         }
         return;
       }
 
-      const asalLabel = asalTxt || document.getElementById('tarifAsalSelect')?.selectedOptions?.[0]?.textContent || 'Asal';
-      const tujuanLabel = tujuanTxt || document.getElementById('tarifTujuanSelect')?.selectedOptions?.[0]?.textContent || 'Tujuan';
-
-      resEl.innerHTML = items.map((item, idx) => {
-        const moda = item.jenis || item.moda || item.nama_moda || item.transport || 'Transportasi Publik';
-        const penyedia = item.nama_penyedia || item.penyedia || item.operator || '';
+      resEl.innerHTML = distanceHeaderHtml + items.map((item, idx) => {
+        const moda = item.jenis_transport || item.jenis || item.moda || item.nama_moda || item.transport || 'Transportasi Publik';
+        const penyedia = item.penyedia || item.nama_penyedia || item.operator || '';
         const jarak = item.jarak_km ?? item.distance_km ?? item.jarak ?? fallbackDistance;
-        const cost = Number(item.tarif ?? item.estimasi_tarif ?? item.estimasi_biaya ?? item.harga ?? item.biaya ?? item.price ?? 0);
-        const jamInfo = item.jam_berlaku || item.jam || item.jadwal || jam;
+        const cost = Number(item.estimasi_tarif ?? item.tarif ?? item.estimasi_biaya ?? item.harga ?? item.biaya ?? item.price ?? 0);
+        const jamInfo = item.jam_berlaku || item.jam || item.jadwal || jamDepart;
+        const tarifPerKm = item.tarif_per_km !== undefined && item.tarif_per_km !== null ? ` • ${formatIdr(item.tarif_per_km)}/km` : '';
         const jarakText = jarak !== null && jarak !== undefined ? `${Number(jarak).toFixed(2)} km` : '';
         const label = `${moda}${penyedia ? ` (${penyedia})` : ''}`;
-        const note = `[Transport API - Tarif] ${asalLabel} -> ${tujuanLabel} naik ${label} jam ${jamInfo}${jarakText ? ` (${jarakText})` : ''}, est. ${formatIdr(cost)}.`;
+        const note = `[Transport API - Tarif] ${asalLabel} -> ${tujuanLabel} naik ${label} (${jamInfo})${jarakText ? ` (${jarakText})` : ''}, est. ${formatIdr(cost)}.`;
 
         return `<div class="p-3 rounded-2xl border ${idx === 0 ? 'border-lokale bg-lokalesoft/50' : 'border-lokaleborder bg-white'} space-y-1.5">
           <div class="flex items-start justify-between gap-2">
@@ -1230,9 +1259,9 @@
                 <strong class="text-ink">${escapeHtml(moda)}</strong>
                 ${idx === 0 ? '<span class="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9px] font-bold">Termurah</span>' : ''}
               </div>
-              <div class="text-[11px] text-muted">${penyedia ? `${escapeHtml(penyedia)} • ` : ''}${jarakText ? `${escapeHtml(jarakText)} • ` : ''}Jam ${escapeHtml(jamInfo)}</div>
+              <div class="text-[11px] text-muted">${penyedia ? `${escapeHtml(penyedia)} • ` : ''}${jarakText ? `${escapeHtml(jarakText)} • ` : ''}Jam ${escapeHtml(jamInfo)}${escapeHtml(tarifPerKm)}</div>
             </div>
-            <strong class="font-mono text-sm text-lokale shrink-0">${formatIdr(cost)}</strong>
+            <strong class="font-mono text-sm text-lokale shrink-0">${escapeHtml(item.estimasi_tarif_format || formatIdr(cost))}</strong>
           </div>
           <div class="flex justify-end">
             <button type="button" data-apply-transport="1" data-label="${escapeHtml(label)}" data-cost="${cost}" data-note="${escapeHtml(note)}" data-pickup="${escapeHtml(asalLabel)}" class="px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[10px] font-bold transition">Terapkan ke Kalkulator</button>
@@ -1267,20 +1296,26 @@
   function renderRouteSegmentsList(segments) {
     if (!Array.isArray(segments) || !segments.length) return '';
     return `<div class="space-y-1.5">` + segments.map((seg, i) => {
-      const moda = seg.moda || seg.jenis || seg.nama_moda || `Segmen ${i + 1}`;
-      const penyedia = seg.penyedia || seg.nama_penyedia || '';
-      const asal = seg.asal || seg.nama_asal || seg.dari || '';
-      const tujuan = seg.tujuan || seg.nama_tujuan || seg.ke || '';
-      const cost = Number(seg.tarif ?? seg.biaya ?? seg.estimasi_biaya ?? seg.harga ?? 0);
+      const armadaList = Array.isArray(seg.opsi_armada) ? seg.opsi_armada : [];
+      const bestArmada = armadaList[0] || null;
+      const moda = seg.jenis_segmen || bestArmada?.jenis_transport || seg.moda || seg.jenis || seg.nama_moda || `Segmen ${i + 1}`;
+      const penyedia = bestArmada?.penyedia || seg.penyedia || seg.nama_penyedia || '';
+      const jam = bestArmada?.jam_berlaku || seg.jam_berlaku || '';
+      const asal = seg.titik_berangkat?.nama_lokasi || seg.asal || seg.nama_asal || seg.dari || '';
+      const tujuan = seg.titik_tiba?.nama_lokasi || seg.tujuan || seg.nama_tujuan || seg.ke || '';
+      const cost = Number(seg.tarif_termurah ?? bestArmada?.estimasi_tarif ?? seg.tarif ?? seg.biaya ?? seg.estimasi_biaya ?? seg.harga ?? 0);
+      const costText = seg.tarif_termurah_format || bestArmada?.estimasi_tarif_format || formatIdr(cost);
       const jarak = seg.jarak_km ?? seg.distance_km ?? null;
-      return `<div class="px-2.5 py-2 rounded-xl bg-white border border-lokaleborder/70 flex flex-wrap items-center justify-between gap-2 text-[11px]">
-        <div class="min-w-0">
-          <div class="font-semibold text-ink">${i + 1}. ${escapeHtml(moda)}${penyedia ? ` • ${escapeHtml(penyedia)}` : ''}</div>
-          ${(asal || tujuan) ? `<div class="text-[10px] text-muted truncate">${escapeHtml(asal)} &rarr; ${escapeHtml(tujuan)}</div>` : ''}
+      const extraArmadaCount = armadaList.length > 1 ? ` (+${armadaList.length - 1} opsi lain)` : '';
+      return `<div class="px-2.5 py-2 rounded-xl bg-white border border-lokaleborder/70 flex flex-wrap items-start justify-between gap-2 text-[11px]">
+        <div class="min-w-0 flex-1 space-y-0.5">
+          <div class="font-semibold text-ink">${seg.segmen || (i + 1)}. ${escapeHtml(moda)}${penyedia ? ` • ${escapeHtml(penyedia)}` : ''}${escapeHtml(extraArmadaCount)}</div>
+          ${(asal || tujuan) ? `<div class="text-[10px] text-muted truncate">${escapeHtml(asal)} &rarr; ${escapeHtml(tujuan)}${jam ? ` • ${escapeHtml(jam)}` : ''}</div>` : ''}
+          ${seg.deskripsi ? `<div class="text-[10px] text-slate-500 leading-snug">${escapeHtml(seg.deskripsi)}</div>` : ''}
         </div>
         <div class="text-right shrink-0">
-          <strong class="font-mono text-lokale">${formatIdr(cost)}</strong>
-          ${jarak !== null && jarak !== undefined ? `<span class="block text-[10px] text-muted">${Number(jarak).toFixed(1)} km</span>` : ''}
+          <strong class="font-mono text-lokale">${escapeHtml(costText)}</strong>
+          ${jarak !== null && jarak !== undefined && Number(jarak) > 0 ? `<span class="block text-[10px] text-muted">${Number(jarak).toFixed(1)} km</span>` : ''}
         </div>
       </div>`;
     }).join('') + `</div>`;
@@ -1319,8 +1354,9 @@
         trip_type: tripType,
       }, 'POST');
       const data = resp?.data || {};
-      const options = extractTransportArray(data, ['rekomendasi', 'opsi', 'routes', 'rute', 'hasil']);
-      const mainObj = options.length ? options[0] : (typeof data === 'object' ? data : null);
+      const hasStructuredRec = Boolean(data && typeof data === 'object' && (data.ringkasan_biaya || data.rute_perjalanan || data.metadata));
+      const options = hasStructuredRec ? [] : extractTransportArray(data, ['rekomendasi', 'opsi', 'routes', 'rute', 'hasil']);
+      const mainObj = hasStructuredRec ? data : (options.length ? options[0] : (typeof data === 'object' ? data : null));
 
       if (!mainObj || (Array.isArray(data) && !data.length)) {
         if (resEl) resEl.innerHTML = '<div class="py-5 text-center bg-lokalesoft/30 rounded-2xl border border-lokaleborder text-muted">Belum tersedia rekomendasi rute multi-moda untuk koordinat ini.</div>';
@@ -1329,24 +1365,32 @@
 
       const listToRender = options.length ? options : [mainObj];
       resEl.innerHTML = listToRender.slice(0, 3).map((rec, idx) => {
-        const totalCost = Number(rec.total_biaya ?? rec.estimasi_biaya ?? rec.total_tarif ?? rec.total_harga ?? rec.tarif ?? 0);
-        const jarak = rec.total_jarak_km ?? rec.jarak_km ?? rec.distance_km ?? null;
-        const segPergi = rec.rute_pergi || rec.pergi || rec.segmen || rec.segments || [];
-        const segPulang = rec.rute_pulang || rec.pulang || [];
-        const ringkas = rec.ringkasan || rec.summary || `Rute ${tripType === 'roundtrip' ? 'Pergi–Pulang' : 'Sekali Jalan'} ke ${namaWisata}`;
-        const label = `Multi-Moda ${tripType === 'roundtrip' ? 'PP' : 'Oneway'} (${namaWisata})`;
-        const note = `[Transport API - Rute] ${ringkas}${jarak !== null ? ` (~${Number(jarak).toFixed(1)} km)` : ''}, est. ${formatIdr(totalCost)}.`;
+        const meta = rec.metadata || {};
+        const costSummary = rec.ringkasan_biaya || {};
+        const routeGroups = rec.rute_perjalanan || {};
+        const segPergi = Array.isArray(routeGroups.pergi) ? routeGroups.pergi : (rec.rute_pergi || rec.pergi || rec.segmen || rec.segments || []);
+        const segPulang = Array.isArray(routeGroups.pulang) ? routeGroups.pulang : (rec.rute_pulang || rec.pulang || []);
+        const totalCost = Number(costSummary.total_biaya_estimasi ?? rec.total_biaya ?? rec.estimasi_biaya ?? rec.total_tarif ?? rec.total_harga ?? rec.tarif ?? 0);
+        const totalCostText = costSummary.total_biaya_format || formatIdr(totalCost);
+        const computedDist = [...segPergi, ...segPulang].reduce((acc, s) => acc + (Number(s?.jarak_km) || 0), 0);
+        const jarak = rec.total_jarak_km ?? rec.jarak_km ?? rec.distance_km ?? (computedDist > 0 ? computedDist : null);
+        const nearestHub = meta.stasiun_terdekat_wisata;
+        const tripLabel = meta.tipe_perjalanan || (tripType === 'roundtrip' ? 'Pulang-Pergi (PP)' : 'Sekali Jalan (One-Way)');
+        const ringkas = rec.ringkasan || rec.summary || `Rute ${tripLabel} ke ${meta.nama_wisata || namaWisata}`;
+        const label = `Multi-Moda ${tripType === 'roundtrip' ? 'PP' : 'Oneway'} (${meta.nama_wisata || namaWisata})`;
+        const note = `[Transport API - Rute] ${ringkas}${jarak !== null ? ` (~${Number(jarak).toFixed(1)} km)` : ''}, est. ${totalCostText}.`;
 
         return `<div class="p-3.5 rounded-2xl border ${idx === 0 ? 'border-lokale bg-lokalesoft/50' : 'border-lokaleborder bg-white'} space-y-2">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <strong class="text-ink">${escapeHtml(ringkas)}</strong>
-              <span class="block text-[10px] text-muted uppercase">${escapeHtml(tripType)}${jarak !== null ? ` • Total ${Number(jarak).toFixed(2)} km` : ''}</span>
+              <span class="block text-[10px] text-muted">${escapeHtml(tripLabel)}${jarak !== null ? ` • Total ~${Number(jarak).toFixed(1)} km` : ''}${nearestHub?.nama_lokasi ? ` • Hub terdekat: ${escapeHtml(nearestHub.nama_lokasi)} (${Number(nearestHub.jarak_ke_objek_wisata_km || 0).toFixed(1)} km ke objek)` : ''}</span>
             </div>
-            <strong class="font-mono text-sm text-lokale">${formatIdr(totalCost)}</strong>
+            <strong class="font-mono text-sm text-lokale">${escapeHtml(totalCostText)}</strong>
           </div>
-          ${Array.isArray(segPergi) && segPergi.length ? `<div><span class="text-[10px] font-bold uppercase text-lokale block mb-1">Perjalanan Berangkat</span>${renderRouteSegmentsList(segPergi)}</div>` : ''}
-          ${Array.isArray(segPulang) && segPulang.length ? `<div><span class="text-[10px] font-bold uppercase text-amber-700 block mb-1">Perjalanan Pulang</span>${renderRouteSegmentsList(segPulang)}</div>` : ''}
+          ${costSummary.keterangan ? `<p class="text-[10px] text-muted">${escapeHtml(costSummary.keterangan)}</p>` : ''}
+          ${Array.isArray(segPergi) && segPergi.length ? `<div><span class="text-[10px] font-bold uppercase text-lokale block mb-1">Perjalanan Berangkat (${escapeHtml(costSummary.biaya_pergi_format || formatIdr(costSummary.biaya_pergi || 0))})</span>${renderRouteSegmentsList(segPergi)}</div>` : ''}
+          ${Array.isArray(segPulang) && segPulang.length ? `<div><span class="text-[10px] font-bold uppercase text-amber-700 block mb-1">Perjalanan Pulang (${escapeHtml(costSummary.biaya_pulang_format || formatIdr(costSummary.biaya_pulang || 0))})</span>${renderRouteSegmentsList(segPulang)}</div>` : ''}
           <div class="flex justify-end pt-1">
             <button type="button" data-apply-rec="1" data-label="${escapeHtml(label)}" data-cost="${totalCost}" data-note="${escapeHtml(note)}" class="px-3.5 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[10px] font-bold transition">Pakai Estimasi Rute Ini</button>
           </div>
@@ -3177,18 +3221,31 @@
           trip_type: 'roundtrip',
         }, 'POST');
         const data = resp?.data || {};
-        const list = extractTransportArray(data, ['rekomendasi', 'opsi', 'routes', 'rute', 'hasil']);
-        const top = list.length ? list[0] : data;
-        const cost = Number(top?.total_biaya ?? top?.estimasi_biaya ?? top?.total_tarif ?? top?.tarif ?? 0);
-        const jarak = top?.total_jarak_km ?? top?.jarak_km ?? top?.distance_km ?? null;
-        const summary = top?.ringkasan || top?.summary || `Rute PP dari ${state.refLabel} ke ${g.destName || g.name}`;
-        const noteText = `[Transport API] ${summary}${jarak !== null ? ` (~${Number(jarak).toFixed(1)} km)` : ''}, est. ${formatIdr(cost)}.`;
+        const hasStructuredRec = Boolean(data && typeof data === 'object' && (data.ringkasan_biaya || data.rute_perjalanan || data.metadata));
+        const list = hasStructuredRec ? [] : extractTransportArray(data, ['rekomendasi', 'opsi', 'routes', 'rute', 'hasil']);
+        const top = hasStructuredRec ? data : (list.length ? list[0] : data);
+        const costSummary = top?.ringkasan_biaya || {};
+        const meta = top?.metadata || {};
+        const routeGroups = top?.rute_perjalanan || {};
+        const segPergi = Array.isArray(routeGroups.pergi) ? routeGroups.pergi : (top?.rute_pergi || top?.pergi || []);
+        const segPulang = Array.isArray(routeGroups.pulang) ? routeGroups.pulang : (top?.rute_pulang || top?.pulang || []);
+        const computedDist = [...segPergi, ...segPulang].reduce((acc, s) => acc + (Number(s?.jarak_km) || 0), 0);
+        const cost = Number(costSummary.total_biaya_estimasi ?? top?.total_biaya ?? top?.estimasi_biaya ?? top?.total_tarif ?? top?.tarif ?? 0);
+        const costText = costSummary.total_biaya_format || formatIdr(cost);
+        const jarak = top?.total_jarak_km ?? top?.jarak_km ?? top?.distance_km ?? (computedDist > 0 ? computedDist : null);
+        const nearestHub = meta.stasiun_terdekat_wisata;
+        const summary = top?.ringkasan || top?.summary || `Rute PP dari ${state.refLabel} ke ${meta.nama_wisata || g.destName || g.name}`;
+        const noteText = `[Transport API] ${summary}${jarak !== null ? ` (~${Number(jarak).toFixed(1)} km)` : ''}, est. ${costText}.`;
 
         box.className = 'p-2.5 rounded-xl bg-white border border-emerald-200 space-y-1.5';
         box.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2">
-            <strong class="text-ink">${escapeHtml(summary)}</strong>
-            <strong class="font-mono text-lokale">${formatIdr(cost)}</strong>
+            <div>
+              <strong class="text-ink block">${escapeHtml(summary)}</strong>
+              ${nearestHub?.nama_lokasi ? `<span class="text-[10px] text-muted block">Hub terdekat: ${escapeHtml(nearestHub.nama_lokasi)} (${Number(nearestHub.jarak_ke_objek_wisata_km || 0).toFixed(1)} km dari basecamp)${jarak !== null ? ` • Total ~${Number(jarak).toFixed(1)} km` : ''}</span>` : ''}
+            </div>
+            <strong class="font-mono text-lokale">${escapeHtml(costText)}</strong>
           </div>
+          ${Array.isArray(segPergi) && segPergi.length ? renderRouteSegmentsList(segPergi.slice(0, 2)) : ''}
           <div class="flex justify-end">
             <button type="button" id="btnCopyRouteToNotes" class="px-2.5 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[10px] font-semibold transition">Tempel ke Catatan Booking</button>
           </div>`;
