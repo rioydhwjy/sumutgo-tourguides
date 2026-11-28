@@ -197,7 +197,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                 <span class="text-lokale">yang Setia.</span>
               </h1>
               <p class="text-sm sm:text-base text-muted leading-relaxed max-w-xl">
-                Jelajah sejarah Kesawan, berburu kuliner malam Medan, atau menyusuri keindahan Danau Toba dan Bukit Lawang—Teman SumutGO nggak pernah jalan sendirian. Kami selalu sedia pemandu lokal ramah dan senyum hangat untuk merayakan setiap langkah perjalananmu.
+                Jelajah sejarah Kesawan, berburu kuliner malam Medan, atau menyusuri keindahan Danau Toba dan Bukit Lawang, Teman SumutGO nggak pernah jalan sendirian. Kami selalu sedia pemandu lokal ramah dan senyum hangat untuk merayakan setiap langkah perjalananmu.
               </p>
               <div class="flex flex-wrap items-center gap-3 pt-2">
                 <a href="#direktori-pemandu" class="px-7 py-3.5 rounded-full bg-lokale hover:bg-lokaledark text-white font-semibold text-sm shadow-lg shadow-lokale/25 transition">

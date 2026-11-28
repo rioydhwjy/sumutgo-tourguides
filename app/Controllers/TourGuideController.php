@@ -28,7 +28,7 @@ class TourGuideController extends BaseController
         $transports = $masterModel->getItems('transports');
 
         return view('tour_guides/index', [
-            'title'           => 'SumutGO — Pemandu Wisata Resmi Medan & Sumatera Utara',
+            'title'           => 'SumutGO | Pemandu Wisata Resmi Medan & Sumatera Utara',
             'guides'          => $guides,
             'stats'           => $stats,
             'specializations' => $specializations,
@@ -48,7 +48,7 @@ class TourGuideController extends BaseController
         $stats = $model->getSummaryStats();
 
         return view('tour_guides/admin', [
-            'title'  => 'SumutGO — Portal Admin, Live API & SQL',
+            'title'  => 'SumutGO | Portal Admin, Live API & SQL',
             'guides' => $guides,
             'stats'  => $stats,
         ]);

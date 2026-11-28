@@ -63,7 +63,7 @@
   const DEFAULT_BOOK_START = cfg.defaultBookDate || addDaysYmd(getTodayYmd(), 1);
 
   // =========================================================================
-  // COMPARE LIST — PER-USER STORAGE (localStorage key terikat user_id aktif)
+  // COMPARE LIST - PER-USER STORAGE (localStorage key terikat user_id aktif)
   // =========================================================================
   function getCompareStorageKey() {
     const user = global.SumutGoAuth && global.SumutGoAuth.getUser ? global.SumutGoAuth.getUser() : null;
@@ -1441,7 +1441,7 @@
       const showApplied = Boolean(appliedTrans && tMode === 'public_api');
       appliedBox.classList.toggle('hidden', !showApplied);
       if (showApplied) {
-        appliedSum.textContent = `${appliedTrans.label} (${formatIdr(appliedTrans.cost)}) — akan disisipkan ke catatan saat klik Booking Paket Ini.`;
+        appliedSum.textContent = `${appliedTrans.label} (${formatIdr(appliedTrans.cost)}), akan disisipkan ke catatan saat klik Booking Paket Ini.`;
       }
     }
 
@@ -1594,7 +1594,7 @@
       const prevDest = preserveSelection ? destSelect.value : '';
       const dests = MASTER_ECOSYSTEM.destinations || [];
       destSelect.innerHTML = `<option value="">Sesuai Destinasi Utama Pemandu</option>` +
-        dests.map((d) => `<option value="${escapeHtml(d.destination_id)}">${escapeHtml(d.destination_code)} — ${escapeHtml(d.destination_name)}</option>`).join('');
+        dests.map((d) => `<option value="${escapeHtml(d.destination_id)}">${escapeHtml(d.destination_code)} • ${escapeHtml(d.destination_name)}</option>`).join('');
       if (prevDest && Array.from(destSelect.options).some((o) => o.value === prevDest)) {
         destSelect.value = prevDest;
       } else if (guide?.primary_destination?.id) {
@@ -1606,7 +1606,7 @@
       const prevTrans = preserveSelection ? transSelect.value : '';
       const transports = MASTER_ECOSYSTEM.transports || [];
       transSelect.innerHTML = `<option value="">Sesuai Armada Default Pemandu</option>` +
-        transports.map((t) => `<option value="${escapeHtml(t.transport_id)}">${escapeHtml(t.transport_code)} — ${escapeHtml(t.transport_name)}</option>`).join('');
+        transports.map((t) => `<option value="${escapeHtml(t.transport_id)}">${escapeHtml(t.transport_code)} • ${escapeHtml(t.transport_name)}</option>`).join('');
       if (prevTrans && Array.from(transSelect.options).some((o) => o.value === prevTrans)) {
         transSelect.value = prevTrans;
       } else if (guide?.default_transport?.id) {
@@ -3057,7 +3057,7 @@
     const planSelEl = document.getElementById('planGuideSelect');
     if (planSelEl) {
       const prev = planSelEl.value;
-      planSelEl.innerHTML = TOUR_GUIDES.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.id)} — ${escapeHtml(g.name)} (${formatIdr(g.price)})</option>`).join('');
+      planSelEl.innerHTML = TOUR_GUIDES.map((g) => `<option value="${escapeHtml(g.id)}">${escapeHtml(g.id)} • ${escapeHtml(g.name)} (${formatIdr(g.price)})</option>`).join('');
       if (prev && Array.from(planSelEl.options).some((o) => o.value === prev)) {
         planSelEl.value = prev;
       }

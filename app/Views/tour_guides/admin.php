@@ -4,7 +4,7 @@
  * @var array<int, array<string, mixed>> $guides
  * @var array<string, mixed> $stats
  */
-$title = $title ?? 'SumutGO — Portal Admin, Live API & SQL';
+$title = $title ?? 'SumutGO | Portal Admin, Live API & SQL';
 $guides = $guides ?? [];
 $stats = $stats ?? [];
 

@@ -9,7 +9,7 @@ $routes->get('/', 'TourGuideController::index');
 $routes->get('tour-guides', 'TourGuideController::index');
 $routes->get('admin', 'TourGuideController::admin');
 
-// Legacy API endpoints (backward compatibility — mutating routes tetap wajib JWT & RBAC)
+// Legacy API endpoints (backward compatibility; mutating routes tetap wajib JWT & RBAC)
 $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function (RouteCollection $routes): void {
     $routes->get('tour-guides', 'TourGuideApiController::index');
     $routes->get('tour-guides/stats', 'TourGuideApiController::stats');
