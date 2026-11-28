@@ -4,7 +4,43 @@ declare(strict_types=1);
 
 require 'vendor/autoload.php';
 
-$conn = pg_connect("host=aws-0-ap-south-1.pooler.supabase.com port=6543 user=postgres.xffqsryvsdmfxnxwspjx password='meckypriscilla.gmail.com' dbname=postgres sslmode='require'");
+// Muat konfigurasi database dari file .env lokal tanpa kredensial hardcoded
+$envPath = realpath(__DIR__ . '/../../.env');
+if (! $envPath || ! is_file($envPath)) {
+    die("File .env tidak ditemukan. Salin template `env` menjadi `.env` terlebih dahulu.\n");
+}
+
+$env = [];
+foreach (file($envPath, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) as $line) {
+    $line = trim($line);
+    if ($line === '' || str_starts_with($line, '#') || ! str_contains($line, '=')) {
+        continue;
+    }
+    [$k, $v] = array_map('trim', explode('=', $line, 2));
+    $env[$k] = trim($v, " \t\n\r\0\x0B'\"");
+}
+
+$host = $env['database.default.hostname'] ?? '';
+$port = $env['database.default.port'] ?? '6543';
+$user = $env['database.default.username'] ?? '';
+$pass = $env['database.default.password'] ?? '';
+$db   = $env['database.default.database'] ?? 'postgres';
+$ssl  = $env['database.default.sslmode'] ?? 'require';
+
+if ($host === '' || $user === '' || $pass === '') {
+    die("Konfigurasi database di .env belum lengkap.\n");
+}
+
+$connStr = sprintf(
+    'host=%s port=%s user=%s password=%s dbname=%s sslmode=%s',
+    $host,
+    $port,
+    $user,
+    $pass,
+    $db,
+    $ssl
+);
+$conn = pg_connect($connStr);
 if (!$conn) {
     die("Connection failed: " . pg_last_error());
 }

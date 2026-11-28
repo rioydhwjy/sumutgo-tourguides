@@ -112,6 +112,7 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
               <button type="button" data-api-test="stats" class="api-test-btn px-3 py-1.5 rounded-full bg-lokalesoft text-lokale font-mono text-[11px]">GET /stats</button>
               <button type="button" data-api-test="detail" class="api-test-btn px-3 py-1.5 rounded-full bg-lokalesoft text-lokale font-mono text-[11px]">GET /TG-001</button>
               <button type="button" data-api-test="v1" class="api-test-btn px-3 py-1.5 rounded-full bg-lokalesoft text-lokale font-mono text-[11px]">GET /api/v1/guides</button>
+              <button type="button" data-api-test="transport" class="api-test-btn px-3 py-1.5 rounded-full bg-lokalesoft text-lokale font-mono text-[11px]">GET /transport/status</button>
             </div>
           </div>
           <pre id="apiSandboxOutput" class="bg-slate-900 text-sky-200 rounded-2xl p-4 font-mono text-[11px] max-h-80 overflow-y-auto"></pre>
@@ -160,6 +161,7 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
             <button type="button" data-v1-admin-tab="users" class="px-3.5 py-1.5 rounded-full text-xs font-bold bg-lokale text-white transition">Verifikasi Pendaftar &amp; HP</button>
             <button type="button" data-v1-admin-tab="contacts" class="px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition">Kontak &amp; Pesan Booking</button>
             <button type="button" data-v1-admin-tab="bookings" class="px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition">Konfirmasi Booking</button>
+            <button type="button" data-v1-admin-tab="transport" class="px-3.5 py-1.5 rounded-full text-xs font-semibold text-lokale hover:bg-white/80 transition">Master Transport API</button>
           </div>
           <span id="v1AdminSummary" class="text-[11px] font-semibold text-muted">Memuat data...</span>
         </div>
@@ -229,12 +231,23 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
 
       document.querySelectorAll("[data-rel]").forEach(b => b.addEventListener("click", async () => {
         const id = b.dataset.rel;
+        const token = window.SumutGoApi?.getToken();
+        if (!token) {
+          fb.className = "p-2.5 rounded-xl border border-amber-200 bg-amber-50 text-amber-800 text-[11px] font-medium";
+          fb.textContent = "Otorisasi Admin diperlukan: silakan masuk pada panel Login Admin v1 di bawah terlebih dahulu.";
+          fb.classList.remove("hidden");
+          document.getElementById("v1AdminLoginBox")?.scrollIntoView({ behavior: "smooth", block: "center" });
+          return;
+        }
         b.disabled = true;
         b.textContent = "Menyimpan...";
         try {
           const resp = await fetch(`${API_BASE_URL}/${encodeURIComponent(id)}/status`, {
             method: "PUT",
-            headers: { "Content-Type": "application/json" },
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${token}`
+            },
             body: JSON.stringify({ availability_status: "Tersedia", status_ketersediaan: "Tersedia" })
           });
           const data = await resp.json();
@@ -261,7 +274,15 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
           ? "api-test-btn px-3 py-1.5 rounded-full bg-lokale text-white font-mono text-[11px] transition"
           : "api-test-btn px-3 py-1.5 rounded-full bg-lokalesoft text-lokale hover:bg-lokale/10 font-mono text-[11px] transition";
       });
-      const url = mode === "stats" ? `${API_BASE_URL}/stats` : mode === "detail" ? `${API_BASE_URL}/TG-001` : mode === "v1" ? `${API_V1_GUIDES}?per_page=5` : API_BASE_URL;
+      const url = mode === "stats"
+        ? `${API_BASE_URL}/stats`
+        : mode === "detail"
+          ? `${API_BASE_URL}/TG-001`
+          : mode === "v1"
+            ? `${API_V1_GUIDES}?per_page=5`
+            : mode === "transport"
+              ? `${(window.SUMUTGO_CONFIG && window.SUMUTGO_CONFIG.apiV1BaseUrl) || '/api/v1'}/transport/status`
+              : API_BASE_URL;
       const out = document.getElementById("apiSandboxOutput");
       out.textContent = "Memuat response API...";
       try {
@@ -313,9 +334,11 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
         ? [["ALL", "Semua Pendaftar"], ["false", "Belum Terkonfirmasi"], ["true", "Sudah Terkonfirmasi"]]
         : tab === "contacts"
           ? [["ALL", "Semua Kontak"], ["unverified", "Belum Diverifikasi"], ["contacted", "Sedang Dihubungi"], ["confirmed", "Terkonfirmasi"]]
-          : [["ALL", "Semua Booking"], ["pending", "Pending"], ["confirmed", "Confirmed"], ["ongoing", "Ongoing"], ["completed", "Completed"], ["cancelled", "Cancelled"]];
+          : tab === "transport"
+            ? [["moda", "Moda Transportasi (/api/moda)"], ["lokasi", "Titik Lokasi (/api/lokasi)"], ["penyedia", "Penyedia (/api/penyedia)"], ["jadwal", "Jadwal (/api/jadwal)"]]
+            : [["ALL", "Semua Booking"], ["pending", "Pending"], ["confirmed", "Confirmed"], ["ongoing", "Ongoing"], ["completed", "Completed"], ["cancelled", "Cancelled"]];
       sel.innerHTML = options.map(([val, lbl]) => `<option value="${val}">${lbl}</option>`).join("");
-      v1State.statusFilter = "ALL";
+      v1State.statusFilter = tab === "transport" ? "moda" : "ALL";
     }
 
     function updateV1AuthUi() {
@@ -507,6 +530,88 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
               await loadV1AdminData();
             } catch (err) {
               setV1Feedback(err.message || "Gagal memperbarui kontak.", true);
+              btn.disabled = false;
+            }
+          }));
+        } else if (v1State.tab === "transport") {
+          const resource = ["moda", "lokasi", "penyedia", "jadwal"].includes(f) ? f : "moda";
+          const resp = await window.SumutGoApi.transport.admin.list(resource, q ? { q } : {});
+          const rawData = resp?.data;
+          let rows = Array.isArray(rawData)
+            ? rawData
+            : Array.isArray(rawData?.[resource])
+              ? rawData[resource]
+              : Array.isArray(rawData?.items)
+                ? rawData.items
+                : [];
+          if (q) {
+            const ql = q.toLowerCase();
+            rows = rows.filter(item => JSON.stringify(item).toLowerCase().includes(ql));
+          }
+          if (summaryEl) summaryEl.textContent = `${rows.length} data ${resource} (Transport API)`;
+          const createFormHtml = `
+            <form id="v1TransportCreateForm" class="border border-lokaleborder rounded-2xl p-4 bg-lokalesoft/35 space-y-2">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <strong class="text-xs text-lokale">Tambah Data ${escapeHtml(resource)} via Secret Key (POST /api/v1/transport/admin/${escapeHtml(resource)})</strong>
+                <span class="text-[10px] font-mono text-muted">Role: Admin</span>
+              </div>
+              <textarea id="v1TransportCreateJson" rows="2" placeholder='Contoh JSON: {"jenis":"Bus Pariwisata"}' class="w-full bg-white border border-lokaleborder rounded-xl px-3 py-2 font-mono text-[11px] text-ink"></textarea>
+              <div class="flex justify-end">
+                <button type="submit" class="px-4 py-1.5 rounded-full bg-lokale hover:bg-lokaledark text-white text-[11px] font-semibold transition">Kirim Data ${escapeHtml(resource)}</button>
+              </div>
+            </form>`;
+
+          const itemsHtml = rows.length
+            ? rows.map(item => {
+                const itemId = item.id ?? item[`${resource}_id`] ?? null;
+                const title = item.nama_lokasi || item.jenis || item.nama_penyedia || item.nama || item.kode || `#${itemId ?? '-'}`;
+                const metaPairs = Object.entries(item)
+                  .slice(0, 6)
+                  .map(([k, v]) => `<span class="px-2 py-0.5 rounded-full bg-lokalesoft text-ink text-[10px] font-mono">${escapeHtml(k)}: ${escapeHtml(typeof v === "object" ? JSON.stringify(v) : v)}</span>`)
+                  .join(" ");
+                return `<div class="border border-lokaleborder rounded-2xl p-4 space-y-2 bg-white">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <strong class="text-sm text-ink">${escapeHtml(title)}</strong>
+                    ${itemId !== null ? `<button type="button" data-v1-transport-del="${escapeHtml(itemId)}" data-resource="${escapeHtml(resource)}" class="px-3 py-1 rounded-full bg-rose-50 hover:bg-rose-500 text-rose-600 hover:text-white border border-rose-200 text-[11px] font-semibold transition">Hapus #${escapeHtml(itemId)}</button>` : ""}
+                  </div>
+                  <div class="flex flex-wrap gap-1.5">${metaPairs}</div>
+                </div>`;
+              }).join("")
+            : `<div class="py-8 text-center bg-lokalesoft/30 rounded-2xl text-muted">Data master ${escapeHtml(resource)} kosong.</div>`;
+
+          listEl.innerHTML = createFormHtml + itemsHtml;
+
+          document.getElementById("v1TransportCreateForm")?.addEventListener("submit", async (e) => {
+            e.preventDefault();
+            const rawJson = (document.getElementById("v1TransportCreateJson")?.value || "").trim();
+            let parsed;
+            try {
+              parsed = JSON.parse(rawJson);
+              if (!parsed || typeof parsed !== "object") throw new Error("Objek JSON tidak valid.");
+            } catch (_) {
+              setV1Feedback("Format JSON payload tidak valid.", true);
+              return;
+            }
+            try {
+              const r = await window.SumutGoApi.transport.admin.create(resource, parsed);
+              setV1Feedback(r.message || `Data ${resource} berhasil ditambahkan.`, false);
+              await loadV1AdminData();
+            } catch (err) {
+              setV1Feedback(err.message || `Gagal menambah data ${resource}.`, true);
+            }
+          });
+
+          listEl.querySelectorAll("[data-v1-transport-del]").forEach(btn => btn.addEventListener("click", async () => {
+            const delId = Number(btn.dataset.v1TransportDel);
+            const resName = btn.dataset.resource;
+            if (!window.confirm(`Hapus data ${resName} #${delId} di Transport API?`)) return;
+            btn.disabled = true;
+            try {
+              const r = await window.SumutGoApi.transport.admin.remove(resName, delId);
+              setV1Feedback(r.message || `Data ${resName} #${delId} dihapus.`, false);
+              await loadV1AdminData();
+            } catch (err) {
+              setV1Feedback(err.message || "Gagal menghapus data transportasi.", true);
               btn.disabled = false;
             }
           }));

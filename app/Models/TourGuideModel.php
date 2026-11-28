@@ -65,7 +65,7 @@ class TourGuideModel extends Model
         // Language Filter (checks if language_id is inside language_ids integer array)
         if (! empty($filters['language_id']) && $filters['language_id'] !== 'ALL') {
             $langId = (int) $filters['language_id'];
-            $builder->where("? = ANY(language_ids)", [$langId]);
+            $builder->where($this->db->escape($langId) . ' = ANY(language_ids)', null, false);
         }
 
         // Price Range Filters
@@ -108,9 +108,11 @@ class TourGuideModel extends Model
                 $builder->orderBy('gmaps_review_count', 'DESC');
                 break;
             case 'rate_asc':
+            case 'price_asc':
                 $builder->orderBy('daily_rate_idr', 'ASC');
                 break;
             case 'rate_desc':
+            case 'price_desc':
                 $builder->orderBy('daily_rate_idr', 'DESC');
                 break;
             case 'name_asc':

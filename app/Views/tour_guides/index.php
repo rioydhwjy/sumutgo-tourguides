@@ -484,6 +484,26 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
             <button type="button" data-landmark="3.6422,98.8853,Bandara Kualanamu (KNO)" class="landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs">✈️ Kualanamu</button>
           </div>
         </div>
+        <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-lokalesoft/50 border border-lokaleborder text-xs">
+          <div class="flex flex-wrap items-center gap-3">
+            <label class="inline-flex items-center gap-2 font-semibold text-ink cursor-pointer">
+              <input type="checkbox" id="chkShowTransportNodes" class="accent-lokale" />
+              <span>Tampilkan Titik Simpul Transportasi</span>
+            </label>
+            <select id="filterTransportNodeType" class="bg-white border border-lokaleborder rounded-xl px-2.5 py-1 text-[11px] text-ink font-medium focus:outline-none">
+              <option value="ALL">Semua Tipe Simpul</option>
+              <option value="bandara">Bandara</option>
+              <option value="stasiun">Stasiun</option>
+              <option value="terminal">Terminal</option>
+              <option value="halte">Halte</option>
+              <option value="pelabuhan">Pelabuhan</option>
+            </select>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="transportNodesStatus" class="text-[11px] text-muted">Centang untuk memuat simpul Bandara, Stasiun &amp; Terminal</span>
+            <button type="button" id="btnRetryTransportNodes" class="hidden px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[10px] font-bold transition">Coba Lagi</button>
+          </div>
+        </div>
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
           <div class="lg:col-span-8 space-y-2">
             <div id="medanLeafletMap" class="border border-lokaleborder"></div>
@@ -514,7 +534,14 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
             <div><label class="block font-semibold mb-1">Peserta</label><input id="planPax" type="number" min="1" max="45" value="4" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2.5 font-mono" /></div>
           </div>
           <div><label class="block font-semibold mb-1">Paket Hotel</label><select id="planHotelTier" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2.5"><option value="partner">Hotel Mitra Guide (Rp 750rb/malam)</option><option value="luxury">Hotel Bintang 5 VIP (Rp 1.45jt/malam)</option><option value="budget">Budget / EcoLodge (Rp 420rb/malam)</option><option value="none">Tanpa Menginap</option></select></div>
-          <div><label class="block font-semibold mb-1">Armada</label><select id="planTransportMode" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2.5"><option value="partner">Armada Mitra Guide (Rp 650rb/hari)</option><option value="hiace">Toyota HiAce Premio (Rp 1.25jt/hari)</option><option value="bus">Big Bus 45-Seater (Rp 2.6jt/hari)</option><option value="self">Kendaraan Pribadi</option></select></div>
+          <div><label class="block font-semibold mb-1">Armada</label><select id="planTransportMode" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2.5"><option value="partner">Armada Mitra Guide (Rp 650rb/hari)</option><option value="hiace">Toyota HiAce Premio (Rp 1.25jt/hari)</option><option value="bus">Big Bus 45-Seater (Rp 2.6jt/hari)</option><option value="public_api">Transportasi Publik / Multi-Moda (Transport API)</option><option value="self">Kendaraan Pribadi</option></select></div>
+          <div id="planExternalTransportAppliedBox" class="hidden rounded-2xl bg-emerald-50/70 border border-emerald-200 p-3 space-y-1.5 text-[11px]">
+            <div class="flex items-center justify-between gap-2">
+              <span class="font-bold text-emerald-800">Rute Transport API Diterapkan</span>
+              <button type="button" id="btnClearAppliedTransport" class="text-[10px] font-semibold text-rose-600 hover:underline">Reset</button>
+            </div>
+            <div id="planExternalTransportSummary" class="text-ink font-medium">-</div>
+          </div>
           <button type="button" id="btnBookFromPlanner" class="w-full py-3 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold">Booking Paket Ini</button>
         </div>
         <div class="lg:col-span-7 space-y-5">
@@ -537,6 +564,132 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           <div class="bg-white rounded-3xl border border-lokaleborder p-6 shadow-sm space-y-3">
             <h3 class="font-display font-bold text-base text-ink">Rencana Perjalanan Harian</h3>
             <div id="planItineraryTimeline" class="space-y-3 text-xs"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INTEGRASI TRANSPORT APPLICATION API (MODA, LOKASI, TARIF & REKOMENDASI MULTI-MODA) -->
+      <div class="max-w-7xl mx-auto mt-6 space-y-5">
+        <div class="bg-white rounded-3xl border border-lokaleborder p-5 shadow-sm flex flex-wrap items-center justify-between gap-3">
+          <div class="space-y-1">
+            <span class="text-[10px] font-bold uppercase tracking-wider text-lokale">Integrasi REST API Transportasi</span>
+            <h3 class="font-display font-extrabold text-lg text-ink">Tarif Simpul &amp; Rekomendasi Rute Multi-Moda</h3>
+            <div id="transportModesBadges" class="flex flex-wrap items-center gap-1.5 pt-1 text-[11px] text-muted">
+              <span>Menyiapkan daftar moda transportasi...</span>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <span id="transportApiHealthBadge" class="px-3 py-1 rounded-full bg-lokalesoft text-lokale border border-lokaleborder text-[11px] font-semibold">Memeriksa API...</span>
+            <button type="button" id="btnRefreshTransportInit" class="px-4 py-2 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-xs font-semibold transition">Muat Ulang Data Transport</button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- KIRI: CEK TARIF & JARAK ANTAR LOKASI -->
+          <div class="lg:col-span-6 bg-white rounded-3xl border border-lokaleborder p-6 shadow-sm space-y-4 text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-lokale">Haversine &amp; Estimasi Termurah</span>
+                <h4 class="font-display font-bold text-base text-ink">Kalkulator Tarif Antar Titik Simpul</h4>
+              </div>
+              <select id="tarifNodeTypeFilter" class="bg-lokalesoft/50 border border-lokaleborder rounded-xl px-2.5 py-1.5 text-[11px] text-ink font-semibold focus:outline-none">
+                <option value="ALL">Semua Tipe Lokasi</option>
+                <option value="bandara">Bandara</option>
+                <option value="stasiun">Stasiun</option>
+                <option value="terminal">Terminal</option>
+                <option value="halte">Halte</option>
+                <option value="pelabuhan">Pelabuhan</option>
+              </select>
+            </div>
+
+            <form id="transportTarifForm" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label for="tarifAsalSelect" class="block font-semibold text-muted mb-1">Titik Simpul Asal</label>
+                  <select id="tarifAsalSelect" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3 py-2 text-xs text-ink focus:outline-none">
+                    <option value="">Pilih dari daftar simpul...</option>
+                  </select>
+                  <input id="tarifAsalText" type="text" maxlength="100" placeholder="Atau ketik nama asal (opsional)" class="mt-1.5 w-full bg-white border border-lokaleborder focus:border-lokale rounded-xl px-3 py-1.5 text-[11px] text-ink focus:outline-none" />
+                </div>
+                <div>
+                  <label for="tarifTujuanSelect" class="block font-semibold text-muted mb-1">Titik Simpul Tujuan</label>
+                  <select id="tarifTujuanSelect" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3 py-2 text-xs text-ink focus:outline-none">
+                    <option value="">Pilih dari daftar simpul...</option>
+                  </select>
+                  <input id="tarifTujuanText" type="text" maxlength="100" placeholder="Atau ketik nama tujuan (opsional)" class="mt-1.5 w-full bg-white border border-lokaleborder focus:border-lokale rounded-xl px-3 py-1.5 text-[11px] text-ink focus:outline-none" />
+                </div>
+              </div>
+
+              <div class="flex flex-wrap items-end justify-between gap-3">
+                <div class="w-36">
+                  <label for="tarifJamInput" class="block font-semibold text-muted mb-1">Jam Keberangkatan</label>
+                  <input id="tarifJamInput" type="time" value="08:00" class="w-full bg-lokalesoft/40 border border-lokaleborder focus:border-lokale rounded-xl px-3 py-2 font-mono text-xs text-ink focus:outline-none" />
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                  <button type="button" id="btnSwapTarifNodes" class="px-3.5 py-2 rounded-full bg-lokalesoft hover:bg-lokale/15 text-lokale border border-lokaleborder font-semibold transition">⇄ Tukar</button>
+                  <button type="submit" id="btnSubmitTarif" class="px-5 py-2 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold shadow-sm transition">Hitung Tarif &amp; Jarak</button>
+                </div>
+              </div>
+            </form>
+
+            <div id="transportTarifFeedback" class="hidden p-3 rounded-2xl text-xs"></div>
+            <div id="transportTarifResults" class="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+              <p class="text-[11px] text-muted py-4 text-center bg-lokalesoft/30 rounded-2xl border border-lokaleborder/60">Pilih titik asal &amp; tujuan untuk menghitung jarak dan estimasi tarif termurah.</p>
+            </div>
+          </div>
+
+          <!-- KANAN: REKOMENDASI RUTE MULTI-MODA WISATA -->
+          <div class="lg:col-span-6 bg-white rounded-3xl border border-lokaleborder p-6 shadow-sm space-y-4 text-xs">
+            <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+              <div>
+                <span class="text-[10px] font-bold uppercase tracking-wider text-lokale">Rute Multi-Moda Wisata</span>
+                <h4 class="font-display font-bold text-base text-ink">Rekomendasi Transportasi ke Destinasi</h4>
+              </div>
+              <button type="button" id="btnSyncRouteWithGuide" class="px-3 py-1.5 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[11px] font-semibold transition">Ikuti Pemandu Terpilih</button>
+            </div>
+
+            <form id="transportRekomendasiForm" class="space-y-3">
+              <div class="bg-lokalesoft/40 border border-lokaleborder rounded-2xl p-3 space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span class="font-bold text-ink text-[11px]">Koordinat Posisi Asal Anda</span>
+                  <div class="flex flex-wrap gap-1.5">
+                    <button type="button" id="btnRouteUseMapRef" class="px-2.5 py-1 rounded-full bg-white hover:bg-lokalesoft text-lokale border border-lokaleborder text-[10px] font-semibold transition">Pakai Titik Peta</button>
+                    <button type="button" id="btnRouteUseGps" class="px-2.5 py-1 rounded-full bg-white hover:bg-lokalesoft text-lokale border border-lokaleborder text-[10px] font-semibold transition">📍 GPS Saya</button>
+                  </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <input id="routeUserLat" type="number" step="any" required value="3.5612" placeholder="user_lat" class="w-full bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 font-mono text-[11px] text-ink" />
+                  <input id="routeUserLng" type="number" step="any" required value="98.6564" placeholder="user_lng" class="w-full bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 font-mono text-[11px] text-ink" />
+                </div>
+              </div>
+
+              <div class="bg-sand/50 border border-lokaleborder rounded-2xl p-3 space-y-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <span class="font-bold text-ink text-[11px]">Tujuan Wisata</span>
+                  <div class="flex items-center gap-2">
+                    <label for="routeTripType" class="text-[10px] font-semibold text-muted">Jenis:</label>
+                    <select id="routeTripType" class="bg-white border border-lokaleborder rounded-full px-2.5 py-1 text-[11px] font-bold text-lokale">
+                      <option value="roundtrip">Pergi–Pulang (Roundtrip)</option>
+                      <option value="oneway">Sekali Jalan (Oneway)</option>
+                    </select>
+                  </div>
+                </div>
+                <input id="routeWisataName" type="text" maxlength="150" placeholder="Nama destinasi wisata (mis. Tjong A Fie Mansion)" class="w-full bg-white border border-lokaleborder rounded-xl px-3 py-1.5 text-xs text-ink" />
+                <div class="grid grid-cols-2 gap-2">
+                  <input id="routeWisataLat" type="number" step="any" required value="3.5891" placeholder="wisata_lat" class="w-full bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 font-mono text-[11px] text-ink" />
+                  <input id="routeWisataLng" type="number" step="any" required value="98.6782" placeholder="wisata_lng" class="w-full bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 font-mono text-[11px] text-ink" />
+                </div>
+              </div>
+
+              <div class="flex justify-end">
+                <button type="submit" id="btnSubmitRekomendasi" class="px-5 py-2 rounded-full bg-lokale hover:bg-lokaledark text-white font-bold shadow-sm transition">Cari Rekomendasi Rute</button>
+              </div>
+            </form>
+
+            <div id="transportRekomendasiFeedback" class="hidden p-3 rounded-2xl text-xs"></div>
+            <div id="transportRekomendasiResults" class="space-y-2.5 max-h-[340px] overflow-y-auto pr-1">
+              <p class="text-[11px] text-muted py-4 text-center bg-lokalesoft/30 rounded-2xl border border-lokaleborder/60">Klik &ldquo;Ikuti Pemandu Terpilih&rdquo; atau masukkan koordinat tujuan untuk melihat rute multi-moda &amp; estimasi biaya.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -770,6 +923,18 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                   <label for="bookNotes" class="block text-[11px] font-semibold text-muted mb-1">Catatan Tambahan (Opsional)</label>
                   <input id="bookNotes" type="text" maxlength="1000" placeholder="Misal: Jemput pukul 08.00 WIB, fokus kuliner halal" class="w-full bg-lokalesoft/40 border border-lokaleborder rounded-xl px-3 py-2 text-xs text-ink focus:outline-none" />
                 </div>
+              </div>
+
+              <!-- Widget Ringkas Rekomendasi Transportasi Eksternal -->
+              <div class="rounded-2xl bg-lokalesoft/35 border border-lokaleborder p-3 space-y-2 text-[11px]">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <span class="font-bold text-ink">Estimasi Transportasi Publik (Transport API)</span>
+                    <span class="block text-[10px] text-muted">Opsional: cek rute multi-moda menuju destinasi pemandu sebelum konfirmasi</span>
+                  </div>
+                  <button type="button" id="btnModalCheckTransportRoute" class="px-3 py-1 rounded-full bg-white hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[10px] font-bold transition">Cek Rute ke Lokasi Pemandu</button>
+                </div>
+                <div id="modalTransportRouteResult" class="hidden"></div>
               </div>
 
               <div id="bookingFormError" class="hidden p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 font-semibold"></div>

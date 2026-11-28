@@ -67,8 +67,9 @@
   // =========================================================================
   function getCompareStorageKey() {
     const user = global.SumutGoAuth && global.SumutGoAuth.getUser ? global.SumutGoAuth.getUser() : null;
-    if (!user || (!user.user_id && !user.id)) return null;
-    const uid = user.user_id || user.id;
+    if (!user) return null;
+    const uid = user.user_id ?? user.id ?? user.sub;
+    if (uid === undefined || uid === null || uid === '') return null;
     return `sumutgo_compare_u${uid}`;
   }
 
@@ -88,8 +89,10 @@
     }
     try {
       const raw = localStorage.getItem(key);
-      state.compareList = raw
-        ? JSON.parse(raw).filter(function (id) { return typeof id === 'string'; })
+      const parsed = raw ? JSON.parse(raw) : [];
+      const seen = new Set();
+      state.compareList = Array.isArray(parsed)
+        ? parsed.filter((id) => typeof id === 'string' && !seen.has(id) && seen.add(id)).slice(0, 3)
         : [];
     } catch (_) {
       state.compareList = [];
@@ -132,10 +135,20 @@
     },
     myBookingsFilter: 'ALL',
     myBookingsList: [],
+    transport: {
+      loaded: false,
+      loading: false,
+      error: null,
+      modes: [],
+      locations: [],
+      applied: null,
+      routeSyncedOnce: false,
+    },
   };
 
   let leafletMap = null;
   let leafletMarkersLayer = null;
+  let transportMarkersLayer = null;
   let guideMarkersById = {};
   let userLocationMarker = null;
   let chartsInitialized = false;
@@ -180,6 +193,46 @@
         ? 'bg-amber-50 text-amber-700 border-amber-200'
         : 'bg-rose-50 text-rose-700 border-rose-200'
   );
+
+  function getGuideDutyMeta(g) {
+    const status = String(g?.status || '');
+    const isBusyStatus = status === 'Sedang Bertugas' || status === 'Booked';
+    const rawEnd = g?.active_booking_end_date ? String(g.active_booking_end_date).trim() : '';
+    const hasDate = /^\d{4}-\d{2}-\d{2}/.test(rawEnd);
+    const dateText = hasDate ? formatDateId(rawEnd.slice(0, 10)) : '';
+    if (!hasDate && !isBusyStatus) return null;
+    const prefix = status === 'Sedang Bertugas' ? 'Bertugas s.d.' : isBusyStatus ? 'Booked s.d.' : 'Jadwal s.d.';
+    return {
+      isBusyStatus,
+      hasDate,
+      dateText,
+      shortText: hasDate ? `s.d. ${dateText}` : '',
+      fullText: hasDate ? `${prefix} ${dateText}` : 'Sedang bertugas (tgl selesai belum tercatat)',
+    };
+  }
+
+  function updateModalGuideStatus(g) {
+    const idEl = document.getElementById('modalGuideId');
+    if (idEl) idEl.textContent = `${g.id} • ${g.status}`;
+    const dutyMeta = getGuideDutyMeta(g);
+    let dutyEl = document.getElementById('modalGuideDutyUntil');
+    if (dutyMeta) {
+      if (!dutyEl && idEl && idEl.parentNode) {
+        dutyEl = document.createElement('span');
+        dutyEl.id = 'modalGuideDutyUntil';
+        idEl.parentNode.appendChild(dutyEl);
+      }
+      if (dutyEl) {
+        dutyEl.className = dutyMeta.hasDate
+          ? 'ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold'
+          : 'ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-muted text-[10px] font-medium';
+        dutyEl.textContent = dutyMeta.fullText;
+        dutyEl.classList.remove('hidden');
+      }
+    } else if (dutyEl) {
+      dutyEl.classList.add('hidden');
+    }
+  }
 
   const bookingStatusBadgeClass = (s) => {
     switch (String(s || '').toLowerCase()) {
@@ -308,20 +361,23 @@
         const langs = getLangNames(g).join(', ');
         const distLabel = formatDistrict(g.district);
         const phoneMasked = g.phone ? `+${g.phone}` : '-';
+        const dutyMeta = getGuideDutyMeta(g);
 
         return `<article class="lokale-card rounded-3xl p-5 flex flex-col justify-between">
           <div>
-            <div class="flex items-center justify-between gap-2 mb-3">
+            <div class="flex items-start justify-between gap-2 mb-3">
               <div class="flex items-center gap-1.5 min-w-0">
                 <span class="font-mono text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-lokalesoft text-lokale shrink-0">${escapeHtml(g.id)}</span>
                 <span class="text-[11px] text-muted truncate">${escapeHtml(g.specialization)}</span>
               </div>
-              <div class="flex items-center gap-1.5 shrink-0">
+              <div class="flex items-start gap-1.5 shrink-0">
                 <button type="button" data-fav-btn="${escapeHtml(g.id)}" aria-label="Favorit ${escapeHtml(g.name)}" class="w-7 h-7 rounded-full border text-xs transition ${state.favorites.has(g.id) ? 'bg-rose-50 border-rose-200 text-rose-500' : 'bg-white border-slate-200 text-slate-400 hover:text-rose-500'}">♥</button>
-                <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
-                ${(g.active_booking_end_date && (g.status === 'Sedang Bertugas' || g.status === 'Booked'))
-                  ? `<span class="text-[10px] text-amber-600 font-semibold block mt-0.5">s.d. ${escapeHtml(formatDateId(g.active_booking_end_date))}</span>`
-                  : ''}
+                <div class="flex flex-col items-end">
+                  <span class="text-[10px] font-bold px-2.5 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+                  ${dutyMeta && dutyMeta.hasDate
+                    ? `<span class="text-[10px] text-amber-600 font-semibold mt-0.5">${escapeHtml(dutyMeta.shortText)}</span>`
+                    : ''}
+                </div>
               </div>
             </div>
             <h3 class="font-display font-bold text-base text-ink">${escapeHtml(g.name)}</h3>
@@ -372,6 +428,7 @@
       wrap.classList.remove('hidden');
       tbody.innerHTML = list.map((g) => {
         const langs = getLangNames(g).join(', ');
+        const dutyMeta = getGuideDutyMeta(g);
         return `<tr class="hover:bg-lokalesoft/40">
           <td class="py-3 px-3 font-mono font-bold text-lokale whitespace-nowrap">${escapeHtml(g.id)}</td>
           <td class="py-3 px-3"><div class="font-bold">${escapeHtml(g.name)}</div><div class="text-[11px] text-muted">${escapeHtml(g.agency)}</div></td>
@@ -389,7 +446,7 @@
             }
           </td>
           <td class="py-3 px-3 font-mono font-bold text-lokale whitespace-nowrap">${formatIdr(g.price)}</td>
-          <td class="py-3 px-3 whitespace-nowrap"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>${(g.active_booking_end_date && (g.status === 'Sedang Bertugas' || g.status === 'Booked')) ? `<span class="block text-[10px] text-amber-600 font-semibold mt-0.5">s.d. ${escapeHtml(formatDateId(g.active_booking_end_date))}</span>` : ''}</td>
+          <td class="py-3 px-3 whitespace-nowrap"><span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>${(dutyMeta && dutyMeta.hasDate) ? `<span class="block text-[10px] text-amber-600 font-semibold mt-0.5">${escapeHtml(dutyMeta.shortText)}</span>` : ''}</td>
           <td class="py-3 px-3 text-right whitespace-nowrap">
             <div class="inline-flex gap-1">
               <button type="button" data-open-guide="${escapeHtml(g.id)}" class="px-3 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[11px] font-semibold transition">Detail</button>
@@ -508,10 +565,14 @@
     const authed = isLoggedIn();
     const langs = getLangNames(g).join(', ') || 'Indonesia';
     const distText = Number.isFinite(g.d) ? `${g.d.toFixed(2)} km dari titik jemput` : formatDistrict(g.district);
+    const dutyMeta = getGuideDutyMeta(g);
     return `<div class="space-y-2 text-xs text-ink">
-      <div class="flex items-center justify-between gap-2">
+      <div class="flex items-start justify-between gap-2">
         <span class="font-mono text-[10px] font-bold px-2 py-0.5 rounded-full bg-lokalesoft text-lokale">${escapeHtml(g.id)}</span>
-        <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+        <div class="flex flex-col items-end">
+          <span class="text-[10px] font-bold px-2 py-0.5 rounded-full border ${statusBadgeClass(g.status)}">${escapeHtml(g.status)}</span>
+          ${dutyMeta && dutyMeta.hasDate ? `<span class="text-[10px] text-amber-600 font-semibold mt-0.5">${escapeHtml(dutyMeta.shortText)}</span>` : ''}
+        </div>
       </div>
       <div>
         <div class="font-display font-bold text-sm text-ink leading-snug">${escapeHtml(g.name)}</div>
@@ -639,6 +700,7 @@
       leafletMap = L.map('medanLeafletMap').setView([state.refLat, state.refLng], 12);
       L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 18 }).addTo(leafletMap);
       leafletMarkersLayer = L.layerGroup().addTo(leafletMap);
+      transportMarkersLayer = L.layerGroup().addTo(leafletMap);
 
       const LocateControl = L.Control.extend({
         options: { position: 'topright' },
@@ -668,6 +730,43 @@
           e.preventDefault();
           e.stopPropagation();
           openGuideModal(detailBtn.dataset.mapDetail, 'detail');
+          return;
+        }
+        const hubRefBtn = e.target.closest('[data-transport-node-ref]');
+        if (hubRefBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          const lat = parseFloat(hubRefBtn.dataset.lat);
+          const lng = parseFloat(hubRefBtn.dataset.lng);
+          const nama = hubRefBtn.dataset.nama || 'Simpul Transportasi';
+          if (Number.isFinite(lat) && Number.isFinite(lng)) {
+            state.refLat = lat;
+            state.refLng = lng;
+            state.refLabel = nama;
+            state.selectedMapGuideId = null;
+            setMapLocationStatus(`Titik jemput dipindahkan ke ${nama}.`, 'success');
+            if (leafletMap) leafletMap.flyTo([lat, lng], 14, { duration: 0.45 });
+            renderMap();
+          }
+          return;
+        }
+        const hubTarifBtn = e.target.closest('[data-transport-node-tarif]');
+        if (hubTarifBtn) {
+          e.preventDefault();
+          e.stopPropagation();
+          const nodeId = hubTarifBtn.dataset.transportNodeTarif || '';
+          const nodeNama = hubTarifBtn.dataset.nama || '';
+          switchTab('planner');
+          ensureTransportCatalogLoaded().then(() => {
+            const asalSel = document.getElementById('tarifAsalSelect');
+            const asalTxt = document.getElementById('tarifAsalText');
+            if (asalSel && nodeId && Array.from(asalSel.options).some((o) => o.value === String(nodeId))) {
+              asalSel.value = String(nodeId);
+            } else if (asalTxt && nodeNama) {
+              asalTxt.value = nodeNama;
+            }
+            document.getElementById('transportTarifForm')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
         }
       });
 
@@ -824,8 +923,458 @@
   }
 
   // =========================================================================
-  // KALKULATOR TRIP
+  // KALKULATOR TRIP & INTEGRASI TRANSPORT APPLICATION API
   // =========================================================================
+  function extractTransportArray(rawData, preferredKeys = []) {
+    if (Array.isArray(rawData)) return rawData;
+    if (!rawData || typeof rawData !== 'object') return [];
+    const candidates = preferredKeys.concat(['items', 'results', 'opsi', 'tarif', 'rute', 'routes', 'lokasi', 'locations', 'transports', 'moda', 'data']);
+    for (let i = 0; i < candidates.length; i += 1) {
+      const val = rawData[candidates[i]];
+      if (Array.isArray(val)) return val;
+    }
+    return [];
+  }
+
+  function formatTransportTypeLabel(t) {
+    const raw = String(t || '').trim();
+    return raw ? raw.charAt(0).toUpperCase() + raw.slice(1) : 'Simpul';
+  }
+
+  function setTransportPanelFeedback(elId, msg, tone = 'info', retryCallback = null) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    if (!msg) {
+      el.innerHTML = '';
+      el.classList.add('hidden');
+      return;
+    }
+    const cls = tone === 'error'
+      ? 'p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-700 text-xs flex flex-wrap items-center justify-between gap-2'
+      : tone === 'warning'
+        ? 'p-3 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-xs flex flex-wrap items-center justify-between gap-2'
+        : 'p-3 rounded-2xl bg-lokalesoft border border-lokaleborder text-lokaledeep text-xs flex flex-wrap items-center justify-between gap-2';
+    el.className = cls;
+    el.innerHTML = `<span>${escapeHtml(msg)}</span>${retryCallback ? '<button type="button" data-transport-retry="1" class="px-3 py-1 rounded-full bg-white hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[10px] font-bold transition">Coba Lagi</button>' : ''}`;
+    el.classList.remove('hidden');
+    if (retryCallback) {
+      el.querySelector('[data-transport-retry]')?.addEventListener('click', retryCallback);
+    }
+  }
+
+  function renderTransportLocationDropdowns() {
+    const typeFilter = (document.getElementById('tarifNodeTypeFilter')?.value || 'ALL').toLowerCase();
+    const asalSel = document.getElementById('tarifAsalSelect');
+    const tujuanSel = document.getElementById('tarifTujuanSelect');
+    if (!asalSel || !tujuanSel) return;
+
+    const prevAsal = asalSel.value;
+    const prevTujuan = tujuanSel.value;
+    const locs = (state.transport.locations || []).filter((l) => (
+      typeFilter === 'all' || String(l.tipe_lokasi || '').toLowerCase() === typeFilter
+    ));
+
+    const optsHtml = '<option value="">Pilih dari daftar simpul...</option>' + locs.map((l) => {
+      const lbl = `${l.nama_lokasi || 'Simpul'} (${formatTransportTypeLabel(l.tipe_lokasi)})`;
+      return `<option value="${escapeHtml(l.id)}">${escapeHtml(lbl)}</option>`;
+    }).join('');
+
+    asalSel.innerHTML = optsHtml;
+    tujuanSel.innerHTML = optsHtml;
+    if (prevAsal && Array.from(asalSel.options).some((o) => o.value === prevAsal)) asalSel.value = prevAsal;
+    if (prevTujuan && Array.from(tujuanSel.options).some((o) => o.value === prevTujuan)) tujuanSel.value = prevTujuan;
+  }
+
+  function renderTransportModesHeader() {
+    const badgesEl = document.getElementById('transportModesBadges');
+    const healthEl = document.getElementById('transportApiHealthBadge');
+
+    if (state.transport.loading) {
+      if (healthEl) {
+        healthEl.className = 'px-3 py-1 rounded-full bg-lokalesoft text-lokale border border-lokaleborder text-[11px] font-semibold';
+        healthEl.textContent = 'Memuat API...';
+      }
+      return;
+    }
+
+    if (state.transport.error) {
+      if (healthEl) {
+        healthEl.className = 'px-3 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-[11px] font-semibold';
+        healthEl.textContent = 'Mode Fallback (API Offline/Belum Aktif)';
+      }
+      if (badgesEl) {
+        badgesEl.innerHTML = `<span class="text-amber-700 font-medium">${escapeHtml(state.transport.error)}</span>`;
+      }
+      return;
+    }
+
+    if (healthEl) {
+      healthEl.className = 'px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[11px] font-semibold';
+      healthEl.textContent = `Terhubung (${state.transport.locations.length} Simpul)`;
+    }
+
+    if (badgesEl) {
+      const modes = state.transport.modes || [];
+      badgesEl.innerHTML = modes.length
+        ? modes.map((m) => `<span class="px-2.5 py-0.5 rounded-full bg-lokalesoft border border-lokaleborder text-lokale font-semibold text-[11px]">${escapeHtml(m.jenis || m.nama || 'Moda')}</span>`).join('')
+        : '<span class="text-muted">Belum ada daftar moda transportasi terdaftar.</span>';
+    }
+  }
+
+  async function renderTransportNodesOnMap() {
+    if (!leafletMap || !transportMarkersLayer) return;
+    transportMarkersLayer.clearLayers();
+
+    const chk = document.getElementById('chkShowTransportNodes');
+    const statusEl = document.getElementById('transportNodesStatus');
+    const retryBtn = document.getElementById('btnRetryTransportNodes');
+    if (retryBtn) retryBtn.classList.add('hidden');
+
+    if (!chk || !chk.checked) {
+      if (statusEl) {
+        statusEl.className = 'text-[11px] text-muted';
+        statusEl.textContent = 'Centang untuk memuat simpul Bandara, Stasiun & Terminal';
+      }
+      return;
+    }
+
+    if (!state.transport.loaded && !state.transport.loading) {
+      if (statusEl) statusEl.textContent = 'Memuat titik simpul Transport API...';
+      await ensureTransportCatalogLoaded();
+    }
+
+    if (state.transport.error) {
+      if (statusEl) {
+        statusEl.className = 'text-[11px] text-rose-600 font-medium';
+        statusEl.textContent = state.transport.error;
+      }
+      if (retryBtn) retryBtn.classList.remove('hidden');
+      return;
+    }
+
+    const typeFilter = (document.getElementById('filterTransportNodeType')?.value || 'ALL').toLowerCase();
+    const hubs = (state.transport.locations || []).filter((l) => {
+      const lat = Number(l.latitude);
+      const lng = Number(l.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
+      return typeFilter === 'all' || String(l.tipe_lokasi || '').toLowerCase() === typeFilter;
+    });
+
+    hubs.forEach((hub) => {
+      const lat = Number(hub.latitude);
+      const lng = Number(hub.longitude);
+      const tipe = formatTransportTypeLabel(hub.tipe_lokasi);
+      const nama = hub.nama_lokasi || 'Simpul Transportasi';
+      const popupHtml = `<div class="space-y-2 text-xs text-ink">
+        <div class="flex items-center justify-between gap-2">
+          <span class="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[10px] font-bold uppercase">${escapeHtml(tipe)}</span>
+          <span class="font-mono text-[10px] text-muted">#${escapeHtml(hub.id)}</span>
+        </div>
+        <div class="font-display font-bold text-sm text-ink leading-snug">${escapeHtml(nama)}</div>
+        <div class="font-mono text-[10px] text-muted">${lat.toFixed(4)}, ${lng.toFixed(4)}</div>
+        <div class="pt-1.5 border-t border-slate-100 flex flex-wrap gap-1.5">
+          <button type="button" data-transport-node-ref="1" data-lat="${lat}" data-lng="${lng}" data-nama="${escapeHtml(nama)}" class="px-2.5 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[10px] font-semibold transition cursor-pointer">Titik Jemput</button>
+          <button type="button" data-transport-node-tarif="${escapeHtml(hub.id)}" data-nama="${escapeHtml(nama)}" class="px-2.5 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[10px] font-semibold transition cursor-pointer">Cek Tarif</button>
+        </div>
+      </div>`;
+
+      L.circleMarker([lat, lng], {
+        radius: 7,
+        fillColor: '#059669',
+        color: '#ffffff',
+        weight: 2.5,
+        fillOpacity: 0.95,
+      }).bindPopup(popupHtml, { maxWidth: 260, autoPan: true }).addTo(transportMarkersLayer);
+    });
+
+    if (statusEl) {
+      statusEl.className = 'text-[11px] text-emerald-700 font-semibold';
+      statusEl.textContent = hubs.length
+        ? `Menampilkan ${hubs.length} simpul transportasi`
+        : 'Tidak ada simpul transportasi untuk filter tipe ini.';
+    }
+  }
+
+  async function ensureTransportCatalogLoaded(force = false) {
+    if (!force && (state.transport.loaded || state.transport.loading)) return;
+    if (!global.SumutGoApi?.transport) return;
+
+    state.transport.loading = true;
+    renderTransportModesHeader();
+
+    try {
+      const [modesRes, locsRes] = await Promise.allSettled([
+        global.SumutGoApi.transport.transports(),
+        global.SumutGoApi.transport.lokasi(),
+      ]);
+
+      let modes = [];
+      let locs = [];
+      let errMsg = null;
+
+      if (modesRes.status === 'fulfilled') {
+        modes = extractTransportArray(modesRes.value?.data, ['transports', 'moda']);
+      } else {
+        errMsg = modesRes.reason?.message || 'Gagal memuat daftar moda Transport API.';
+      }
+
+      if (locsRes.status === 'fulfilled') {
+        locs = extractTransportArray(locsRes.value?.data, ['lokasi', 'locations']);
+      } else if (!errMsg) {
+        errMsg = locsRes.reason?.message || 'Gagal memuat daftar lokasi simpul Transport API.';
+      }
+
+      if (modesRes.status === 'rejected' && locsRes.status === 'rejected') {
+        state.transport.error = errMsg;
+        state.transport.loaded = false;
+      } else {
+        state.transport.error = errMsg;
+        state.transport.modes = modes;
+        state.transport.locations = locs;
+        state.transport.loaded = true;
+      }
+    } catch (err) {
+      state.transport.error = err?.message || 'Layanan Transport API sedang tidak tersedia.';
+      state.transport.loaded = false;
+    } finally {
+      state.transport.loading = false;
+      renderTransportModesHeader();
+      renderTransportLocationDropdowns();
+      if (document.getElementById('chkShowTransportNodes')?.checked) {
+        renderTransportNodesOnMap();
+      }
+    }
+  }
+
+  function applyExternalTransportEstimate(estimate) {
+    state.transport.applied = estimate;
+    const modeSel = document.getElementById('planTransportMode');
+    if (modeSel) modeSel.value = 'public_api';
+    updatePlanner();
+    global.SumutGoAuth?.showToast(`Estimasi "${estimate.label}" diterapkan ke Kalkulator Trip!`, 'success');
+  }
+
+  function syncRouteFormWithGuide(g) {
+    const guide = g || findGuide(document.getElementById('planGuideSelect')?.value) || TOUR_GUIDES[0];
+    if (!guide) return;
+    const nameEl = document.getElementById('routeWisataName');
+    const latEl = document.getElementById('routeWisataLat');
+    const lngEl = document.getElementById('routeWisataLng');
+    if (nameEl) nameEl.value = guide.destName || guide.name || '';
+    if (latEl && guide.lat) latEl.value = Number(guide.lat).toFixed(6);
+    if (lngEl && guide.lng) lngEl.value = Number(guide.lng).toFixed(6);
+  }
+
+  async function handleTarifFormSubmit(e) {
+    if (e) e.preventDefault();
+    const idAsal = document.getElementById('tarifAsalSelect')?.value || '';
+    const idTujuan = document.getElementById('tarifTujuanSelect')?.value || '';
+    const asalTxt = (document.getElementById('tarifAsalText')?.value || '').trim();
+    const tujuanTxt = (document.getElementById('tarifTujuanText')?.value || '').trim();
+    const jam = (document.getElementById('tarifJamInput')?.value || '08:00').trim();
+    const btn = document.getElementById('btnSubmitTarif');
+    const resEl = document.getElementById('transportTarifResults');
+
+    setTransportPanelFeedback('transportTarifFeedback', '');
+    if ((!idAsal && !asalTxt) || (!idTujuan && !tujuanTxt)) {
+      setTransportPanelFeedback('transportTarifFeedback', 'Pilih simpul asal & tujuan (atau ketik nama lokasinya) terlebih dahulu.', 'warning');
+      return;
+    }
+
+    const params = { jam };
+    if (idAsal) params.id_asal = idAsal;
+    if (asalTxt) params.asal = asalTxt;
+    if (idTujuan) params.id_tujuan = idTujuan;
+    if (tujuanTxt) params.tujuan = tujuanTxt;
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Menghitung...';
+    }
+    if (resEl) resEl.innerHTML = '<div class="py-5 text-center text-muted">Menghitung jarak Haversine &amp; tarif dari Transport API...</div>';
+
+    try {
+      const resp = await global.SumutGoApi.transport.tarif(params);
+      const data = resp?.data || {};
+      const items = extractTransportArray(data, ['opsi', 'tarif', 'rute', 'routes', 'hasil', 'results']);
+      const fallbackDistance = data.jarak_km ?? data.distance_km ?? data.jarak ?? null;
+
+      if (!items.length && (data.tarif !== undefined || data.estimasi_tarif !== undefined || data.estimasi_biaya !== undefined || data.harga !== undefined)) {
+        items.push(data);
+      }
+
+      if (!items.length) {
+        if (resEl) {
+          resEl.innerHTML = '<div class="py-5 text-center bg-lokalesoft/30 rounded-2xl border border-lokaleborder text-muted">Belum ditemukan rute atau tarif tersedia untuk kombinasi lokasi dan jam tersebut.</div>';
+        }
+        return;
+      }
+
+      const asalLabel = asalTxt || document.getElementById('tarifAsalSelect')?.selectedOptions?.[0]?.textContent || 'Asal';
+      const tujuanLabel = tujuanTxt || document.getElementById('tarifTujuanSelect')?.selectedOptions?.[0]?.textContent || 'Tujuan';
+
+      resEl.innerHTML = items.map((item, idx) => {
+        const moda = item.jenis || item.moda || item.nama_moda || item.transport || 'Transportasi Publik';
+        const penyedia = item.nama_penyedia || item.penyedia || item.operator || '';
+        const jarak = item.jarak_km ?? item.distance_km ?? item.jarak ?? fallbackDistance;
+        const cost = Number(item.tarif ?? item.estimasi_tarif ?? item.estimasi_biaya ?? item.harga ?? item.biaya ?? item.price ?? 0);
+        const jamInfo = item.jam_berlaku || item.jam || item.jadwal || jam;
+        const jarakText = jarak !== null && jarak !== undefined ? `${Number(jarak).toFixed(2)} km` : '';
+        const label = `${moda}${penyedia ? ` (${penyedia})` : ''}`;
+        const note = `[Transport API - Tarif] ${asalLabel} -> ${tujuanLabel} naik ${label} jam ${jamInfo}${jarakText ? ` (${jarakText})` : ''}, est. ${formatIdr(cost)}.`;
+
+        return `<div class="p-3 rounded-2xl border ${idx === 0 ? 'border-lokale bg-lokalesoft/50' : 'border-lokaleborder bg-white'} space-y-1.5">
+          <div class="flex items-start justify-between gap-2">
+            <div>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <strong class="text-ink">${escapeHtml(moda)}</strong>
+                ${idx === 0 ? '<span class="px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700 text-[9px] font-bold">Termurah</span>' : ''}
+              </div>
+              <div class="text-[11px] text-muted">${penyedia ? `${escapeHtml(penyedia)} • ` : ''}${jarakText ? `${escapeHtml(jarakText)} • ` : ''}Jam ${escapeHtml(jamInfo)}</div>
+            </div>
+            <strong class="font-mono text-sm text-lokale shrink-0">${formatIdr(cost)}</strong>
+          </div>
+          <div class="flex justify-end">
+            <button type="button" data-apply-transport="1" data-label="${escapeHtml(label)}" data-cost="${cost}" data-note="${escapeHtml(note)}" data-pickup="${escapeHtml(asalLabel)}" class="px-3 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[10px] font-bold transition">Terapkan ke Kalkulator</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      resEl.querySelectorAll('[data-apply-transport]').forEach((b) => {
+        b.addEventListener('click', () => {
+          applyExternalTransportEstimate({
+            source: 'tarif',
+            label: b.dataset.label,
+            cost: Number(b.dataset.cost || 0),
+            note: b.dataset.note,
+            pickup: b.dataset.pickup,
+          });
+        });
+      });
+    } catch (err) {
+      setTransportPanelFeedback('transportTarifFeedback', err.message || 'Gagal menghubungi endpoint tarif Transport API.', 'error', () => handleTarifFormSubmit());
+      if (resEl) {
+        resEl.innerHTML = '<div class="py-4 text-center text-muted bg-lokalesoft/20 rounded-2xl">Data tarif tidak dapat dimuat saat ini.</div>';
+      }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Hitung Tarif & Jarak';
+      }
+    }
+  }
+
+  function renderRouteSegmentsList(segments) {
+    if (!Array.isArray(segments) || !segments.length) return '';
+    return `<div class="space-y-1.5">` + segments.map((seg, i) => {
+      const moda = seg.moda || seg.jenis || seg.nama_moda || `Segmen ${i + 1}`;
+      const penyedia = seg.penyedia || seg.nama_penyedia || '';
+      const asal = seg.asal || seg.nama_asal || seg.dari || '';
+      const tujuan = seg.tujuan || seg.nama_tujuan || seg.ke || '';
+      const cost = Number(seg.tarif ?? seg.biaya ?? seg.estimasi_biaya ?? seg.harga ?? 0);
+      const jarak = seg.jarak_km ?? seg.distance_km ?? null;
+      return `<div class="px-2.5 py-2 rounded-xl bg-white border border-lokaleborder/70 flex flex-wrap items-center justify-between gap-2 text-[11px]">
+        <div class="min-w-0">
+          <div class="font-semibold text-ink">${i + 1}. ${escapeHtml(moda)}${penyedia ? ` • ${escapeHtml(penyedia)}` : ''}</div>
+          ${(asal || tujuan) ? `<div class="text-[10px] text-muted truncate">${escapeHtml(asal)} &rarr; ${escapeHtml(tujuan)}</div>` : ''}
+        </div>
+        <div class="text-right shrink-0">
+          <strong class="font-mono text-lokale">${formatIdr(cost)}</strong>
+          ${jarak !== null && jarak !== undefined ? `<span class="block text-[10px] text-muted">${Number(jarak).toFixed(1)} km</span>` : ''}
+        </div>
+      </div>`;
+    }).join('') + `</div>`;
+  }
+
+  async function handleRekomendasiFormSubmit(e) {
+    if (e) e.preventDefault();
+    const userLat = parseFloat(document.getElementById('routeUserLat')?.value);
+    const userLng = parseFloat(document.getElementById('routeUserLng')?.value);
+    const wisataLat = parseFloat(document.getElementById('routeWisataLat')?.value);
+    const wisataLng = parseFloat(document.getElementById('routeWisataLng')?.value);
+    const namaWisata = (document.getElementById('routeWisataName')?.value || 'Destinasi Wisata').trim();
+    const tripType = document.getElementById('routeTripType')?.value === 'oneway' ? 'oneway' : 'roundtrip';
+    const btn = document.getElementById('btnSubmitRekomendasi');
+    const resEl = document.getElementById('transportRekomendasiResults');
+
+    setTransportPanelFeedback('transportRekomendasiFeedback', '');
+    if (!Number.isFinite(userLat) || !Number.isFinite(userLng) || !Number.isFinite(wisataLat) || !Number.isFinite(wisataLng)) {
+      setTransportPanelFeedback('transportRekomendasiFeedback', 'Koordinat asal & tujuan wisata harus diisi angka valid.', 'warning');
+      return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Mencari Rute...';
+    }
+    if (resEl) resEl.innerHTML = '<div class="py-5 text-center text-muted">Menyusun rekomendasi rute multi-moda dari Transport API...</div>';
+
+    try {
+      const resp = await global.SumutGoApi.transport.rekomendasiWisata({
+        user_lat: userLat,
+        user_lng: userLng,
+        wisata_lat: wisataLat,
+        wisata_lng: wisataLng,
+        nama_wisata: namaWisata,
+        trip_type: tripType,
+      }, 'POST');
+      const data = resp?.data || {};
+      const options = extractTransportArray(data, ['rekomendasi', 'opsi', 'routes', 'rute', 'hasil']);
+      const mainObj = options.length ? options[0] : (typeof data === 'object' ? data : null);
+
+      if (!mainObj || (Array.isArray(data) && !data.length)) {
+        if (resEl) resEl.innerHTML = '<div class="py-5 text-center bg-lokalesoft/30 rounded-2xl border border-lokaleborder text-muted">Belum tersedia rekomendasi rute multi-moda untuk koordinat ini.</div>';
+        return;
+      }
+
+      const listToRender = options.length ? options : [mainObj];
+      resEl.innerHTML = listToRender.slice(0, 3).map((rec, idx) => {
+        const totalCost = Number(rec.total_biaya ?? rec.estimasi_biaya ?? rec.total_tarif ?? rec.total_harga ?? rec.tarif ?? 0);
+        const jarak = rec.total_jarak_km ?? rec.jarak_km ?? rec.distance_km ?? null;
+        const segPergi = rec.rute_pergi || rec.pergi || rec.segmen || rec.segments || [];
+        const segPulang = rec.rute_pulang || rec.pulang || [];
+        const ringkas = rec.ringkasan || rec.summary || `Rute ${tripType === 'roundtrip' ? 'Pergi–Pulang' : 'Sekali Jalan'} ke ${namaWisata}`;
+        const label = `Multi-Moda ${tripType === 'roundtrip' ? 'PP' : 'Oneway'} (${namaWisata})`;
+        const note = `[Transport API - Rute] ${ringkas}${jarak !== null ? ` (~${Number(jarak).toFixed(1)} km)` : ''}, est. ${formatIdr(totalCost)}.`;
+
+        return `<div class="p-3.5 rounded-2xl border ${idx === 0 ? 'border-lokale bg-lokalesoft/50' : 'border-lokaleborder bg-white'} space-y-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <strong class="text-ink">${escapeHtml(ringkas)}</strong>
+              <span class="block text-[10px] text-muted uppercase">${escapeHtml(tripType)}${jarak !== null ? ` • Total ${Number(jarak).toFixed(2)} km` : ''}</span>
+            </div>
+            <strong class="font-mono text-sm text-lokale">${formatIdr(totalCost)}</strong>
+          </div>
+          ${Array.isArray(segPergi) && segPergi.length ? `<div><span class="text-[10px] font-bold uppercase text-lokale block mb-1">Perjalanan Berangkat</span>${renderRouteSegmentsList(segPergi)}</div>` : ''}
+          ${Array.isArray(segPulang) && segPulang.length ? `<div><span class="text-[10px] font-bold uppercase text-amber-700 block mb-1">Perjalanan Pulang</span>${renderRouteSegmentsList(segPulang)}</div>` : ''}
+          <div class="flex justify-end pt-1">
+            <button type="button" data-apply-rec="1" data-label="${escapeHtml(label)}" data-cost="${totalCost}" data-note="${escapeHtml(note)}" class="px-3.5 py-1 rounded-full bg-lokale hover:bg-lokaledark text-white text-[10px] font-bold transition">Pakai Estimasi Rute Ini</button>
+          </div>
+        </div>`;
+      }).join('');
+
+      resEl.querySelectorAll('[data-apply-rec]').forEach((b) => {
+        b.addEventListener('click', () => {
+          applyExternalTransportEstimate({
+            source: 'rekomendasi',
+            label: b.dataset.label,
+            cost: Number(b.dataset.cost || 0),
+            note: b.dataset.note,
+            pickup: state.refLabel || '',
+          });
+        });
+      });
+    } catch (err) {
+      setTransportPanelFeedback('transportRekomendasiFeedback', err.message || 'Gagal memuat rekomendasi rute wisata.', 'error', () => handleRekomendasiFormSubmit());
+      if (resEl) resEl.innerHTML = '<div class="py-4 text-center text-muted bg-lokalesoft/20 rounded-2xl">Rekomendasi rute belum dapat dimuat.</div>';
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Cari Rekomendasi Rute';
+      }
+    }
+  }
+
   function updatePlanner() {
     const selEl = document.getElementById('planGuideSelect');
     const g = (selEl ? findGuide(selEl.value) : null) || TOUR_GUIDES[0];
@@ -834,8 +1383,29 @@
     const pax = Math.max(1, Number(document.getElementById('planPax')?.value || 1));
     const hTier = document.getElementById('planHotelTier')?.value || 'partner';
     const tMode = document.getElementById('planTransportMode')?.value || 'partner';
+    const appliedTrans = state.transport.applied;
+
     const gCost = g.price * days;
-    const tCost = (tMode === 'hiace' ? 1250000 : tMode === 'bus' ? 2600000 : tMode === 'self' ? 0 : 650000) * days;
+    let tCost = 0;
+    let tLabel = g.transportName;
+    if (tMode === 'public_api') {
+      tCost = appliedTrans ? Math.max(0, Number(appliedTrans.cost || 0)) : 0;
+      tLabel = appliedTrans ? appliedTrans.label : 'Pilih tarif/rute Transport API di bawah';
+    } else {
+      tCost = (tMode === 'hiace' ? 1250000 : tMode === 'bus' ? 2600000 : tMode === 'self' ? 0 : 650000) * days;
+      if (tMode === 'self') tLabel = 'Kendaraan Pribadi';
+    }
+
+    const appliedBox = document.getElementById('planExternalTransportAppliedBox');
+    const appliedSum = document.getElementById('planExternalTransportSummary');
+    if (appliedBox && appliedSum) {
+      const showApplied = Boolean(appliedTrans && tMode === 'public_api');
+      appliedBox.classList.toggle('hidden', !showApplied);
+      if (showApplied) {
+        appliedSum.textContent = `${appliedTrans.label} (${formatIdr(appliedTrans.cost)}) — akan disisipkan ke catatan saat klik Booking Paket Ini.`;
+      }
+    }
+
     const hCost = hTier === 'none' ? 0 : (hTier === 'luxury' ? 1450000 : hTier === 'budget' ? 420000 : 750000) * Math.ceil(pax / 2) * Math.max(1, days - 1);
     const cCost = pax * days * 75000;
     const total = gCost + tCost + hCost + cCost;
@@ -844,7 +1414,7 @@
     document.getElementById('planCostPerPax').textContent = `${formatIdr(Math.round(total / pax))} / pax`;
     document.getElementById('planGuideLabel').textContent = g.name;
     document.getElementById('planGuideCost').textContent = formatIdr(gCost);
-    document.getElementById('planTransLabel').textContent = tMode === 'self' ? 'Kendaraan Pribadi' : g.transportName;
+    document.getElementById('planTransLabel').textContent = tLabel;
     document.getElementById('planTransCost').textContent = formatIdr(tCost);
     document.getElementById('planHotelLabel').textContent = hTier === 'none' ? 'Tanpa Menginap' : g.hotelName;
     document.getElementById('planHotelCost').textContent = formatIdr(hCost);
@@ -1154,22 +1724,7 @@
     state.activeGuideId = g.id;
     state.activeGuideDetail = g;
 
-    document.getElementById('modalGuideId').textContent = `${g.id} • ${g.status}`;
-    if (g.active_booking_end_date && (g.status === 'Sedang Bertugas' || g.status === 'Booked')) {
-      let dutyEl = document.getElementById('modalGuideDutyUntil');
-      if (!dutyEl) {
-        dutyEl = document.createElement('span');
-        dutyEl.id = 'modalGuideDutyUntil';
-        dutyEl.className = 'ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold';
-        const refEl = document.getElementById('modalGuideId');
-        if (refEl && refEl.parentNode) refEl.parentNode.appendChild(dutyEl);
-      }
-      dutyEl.textContent = `Bertugas s.d. ${formatDateId(g.active_booking_end_date)}`;
-      dutyEl.classList.remove('hidden');
-    } else {
-      const dutyEl = document.getElementById('modalGuideDutyUntil');
-      if (dutyEl) dutyEl.classList.add('hidden');
-    }
+    updateModalGuideStatus(g);
     document.getElementById('modalGuideName').textContent = g.name;
     document.getElementById('modalAgency').textContent = g.agency;
     document.getElementById('modalAddress').textContent = g.address || '-';
@@ -1228,8 +1783,8 @@
     state.booking.days = daysDefault;
     state.booking.endDate = addDaysYmd(startDefault, daysDefault - 1);
     state.booking.guests = guestsDefault;
-    state.booking.meetingPoint = '';
-    state.booking.notes = '';
+    state.booking.meetingPoint = (prefill && prefill.meetingPoint) ? String(prefill.meetingPoint) : '';
+    state.booking.notes = (prefill && prefill.notes) ? String(prefill.notes) : '';
     state.booking.confirmedReceipt = null;
 
     const startEl = document.getElementById('bookStartDate');
@@ -1238,6 +1793,7 @@
     const guestsEl = document.getElementById('bookGuests');
     const mpEl = document.getElementById('bookMeetingPoint');
     const notesEl = document.getElementById('bookNotes');
+    const modalRouteBox = document.getElementById('modalTransportRouteResult');
 
     if (startEl) {
       startEl.min = today;
@@ -1249,8 +1805,12 @@
     }
     if (daysEl) daysEl.value = String(state.booking.days);
     if (guestsEl) guestsEl.value = String(state.booking.guests);
-    if (mpEl) mpEl.value = '';
-    if (notesEl) notesEl.value = '';
+    if (mpEl) mpEl.value = state.booking.meetingPoint;
+    if (notesEl) notesEl.value = state.booking.notes;
+    if (modalRouteBox) {
+      modalRouteBox.innerHTML = '';
+      modalRouteBox.classList.add('hidden');
+    }
 
     document.getElementById('bookingFormError')?.classList.add('hidden');
     document.getElementById('bookingConfirmError')?.classList.add('hidden');
@@ -1445,7 +2005,7 @@
         const freshGuide = await global.SumutGoApi.guides.detail(g.id);
         if (freshGuide?.data) {
           updateGuideInCache(freshGuide.data);
-          document.getElementById('modalGuideId').textContent = `${freshGuide.data.id} • ${freshGuide.data.status}`;
+          updateModalGuideStatus(freshGuide.data);
           renderDirectory();
           if (state.activeTab === 'map') renderMap({ preserveListScroll: true });
         }
@@ -1962,11 +2522,16 @@
 
     document.getElementById('compareModalBody').innerHTML = items.length
       ? `<div class="grid grid-cols-1 ${colClass} gap-4">` + items.map((g) => {
-          const dutyUntilHtml = (g.active_booking_end_date && (g.status === 'Sedang Bertugas' || g.status === 'Booked'))
-            ? `<div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold">
-                <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                Bertugas s.d. ${escapeHtml(formatDateId(g.active_booking_end_date))}
-              </div>`
+          const dutyMeta = getGuideDutyMeta(g);
+          const dutyUntilHtml = dutyMeta
+            ? (dutyMeta.hasDate
+              ? `<div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold">
+                  <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  ${escapeHtml(dutyMeta.fullText)}
+                </div>`
+              : `<div class="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-muted text-[10px] font-medium">
+                  ${escapeHtml(dutyMeta.fullText)}
+                </div>`)
             : '';
           return `
           <div class="bg-lokalesoft/50 border border-lokaleborder rounded-2xl p-4 space-y-1.5 flex flex-col justify-between">
@@ -2041,7 +2606,14 @@
         : 'main-tab-mobile px-3.5 py-1.5 rounded-full text-xs font-semibold whitespace-nowrap bg-lokalesoft text-lokale transition';
     });
     if (t === 'map') initOrUpdateMap();
-    if (t === 'planner') updatePlanner();
+    if (t === 'planner') {
+      updatePlanner();
+      ensureTransportCatalogLoaded();
+      if (!state.transport.routeSyncedOnce) {
+        state.transport.routeSyncedOnce = true;
+        syncRouteFormWithGuide();
+      }
+    }
     if (t === 'analytics') renderAnalytics();
   }
 
@@ -2356,6 +2928,7 @@
 
     // 4. Jika logout atau bukan admin, tutup modal khusus user terautentikasi
     if (!authed) {
+      document.getElementById('compareModal')?.classList.add('hidden');
       document.getElementById('myBookingsModal')?.classList.add('hidden');
       document.getElementById('adminConfirmModal')?.classList.add('hidden');
     } else if (String((_user && _user.role) || '').toLowerCase() !== 'admin') {
@@ -2496,15 +3069,145 @@
     });
 
     document.getElementById('chkMapOnlyAvailable')?.addEventListener('change', () => renderMap());
+    document.getElementById('chkShowTransportNodes')?.addEventListener('change', () => renderTransportNodesOnMap());
+    document.getElementById('filterTransportNodeType')?.addEventListener('change', () => renderTransportNodesOnMap());
+    document.getElementById('btnRetryTransportNodes')?.addEventListener('click', async () => {
+      await ensureTransportCatalogLoaded(true);
+      renderTransportNodesOnMap();
+    });
+
     ['planGuideSelect', 'planDays', 'planPax', 'planHotelTier', 'planTransportMode'].forEach((id) => {
       document.getElementById(id)?.addEventListener('change', updatePlanner);
     });
+
+    document.getElementById('btnClearAppliedTransport')?.addEventListener('click', () => {
+      state.transport.applied = null;
+      const modeSel = document.getElementById('planTransportMode');
+      if (modeSel && modeSel.value === 'public_api') modeSel.value = 'partner';
+      updatePlanner();
+    });
+    document.getElementById('btnRefreshTransportInit')?.addEventListener('click', () => ensureTransportCatalogLoaded(true));
+    document.getElementById('tarifNodeTypeFilter')?.addEventListener('change', renderTransportLocationDropdowns);
+    document.getElementById('btnSwapTarifNodes')?.addEventListener('click', () => {
+      const aSel = document.getElementById('tarifAsalSelect');
+      const tSel = document.getElementById('tarifTujuanSelect');
+      const aTxt = document.getElementById('tarifAsalText');
+      const tTxt = document.getElementById('tarifTujuanText');
+      if (aSel && tSel) {
+        const tmp = aSel.value;
+        aSel.value = tSel.value;
+        tSel.value = tmp;
+      }
+      if (aTxt && tTxt) {
+        const tmp = aTxt.value;
+        aTxt.value = tTxt.value;
+        tTxt.value = tmp;
+      }
+    });
+    document.getElementById('transportTarifForm')?.addEventListener('submit', handleTarifFormSubmit);
+    document.getElementById('btnSyncRouteWithGuide')?.addEventListener('click', () => syncRouteFormWithGuide());
+    document.getElementById('btnRouteUseMapRef')?.addEventListener('click', () => {
+      const latEl = document.getElementById('routeUserLat');
+      const lngEl = document.getElementById('routeUserLng');
+      if (latEl) latEl.value = Number(state.refLat).toFixed(6);
+      if (lngEl) lngEl.value = Number(state.refLng).toFixed(6);
+      global.SumutGoAuth?.showToast(`Koordinat awal disinkronkan dengan ${state.refLabel}.`, 'info');
+    });
+    document.getElementById('btnRouteUseGps')?.addEventListener('click', () => {
+      if (!navigator.geolocation) {
+        setTransportPanelFeedback('transportRekomendasiFeedback', 'Browser tidak mendukung geolokasi.', 'error');
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const latEl = document.getElementById('routeUserLat');
+          const lngEl = document.getElementById('routeUserLng');
+          if (latEl) latEl.value = Number(pos.coords.latitude).toFixed(6);
+          if (lngEl) lngEl.value = Number(pos.coords.longitude).toFixed(6);
+          global.SumutGoAuth?.showToast('Koordinat GPS Anda berhasil diisi.', 'success');
+        },
+        () => {
+          setTransportPanelFeedback('transportRekomendasiFeedback', 'Gagal membaca posisi GPS browser.', 'error');
+        },
+        { enableHighAccuracy: true, timeout: 10000 }
+      );
+    });
+    document.getElementById('transportRekomendasiForm')?.addEventListener('submit', handleRekomendasiFormSubmit);
 
     document.getElementById('btnBookFromPlanner')?.addEventListener('click', () => {
       const guideId = document.getElementById('planGuideSelect')?.value;
       const days = Math.max(1, Number(document.getElementById('planDays')?.value || 2));
       const guests = Math.max(1, Number(document.getElementById('planPax')?.value || 2));
-      handleStartBooking(guideId, { days, guests });
+      const tMode = document.getElementById('planTransportMode')?.value || 'partner';
+      const appliedTrans = state.transport.applied;
+      const prefill = { days, guests };
+      if (tMode === 'public_api' && appliedTrans) {
+        if (appliedTrans.note) prefill.notes = appliedTrans.note;
+        if (appliedTrans.pickup) prefill.meetingPoint = appliedTrans.pickup;
+      }
+      handleStartBooking(guideId, prefill);
+    });
+
+    document.getElementById('btnModalCheckTransportRoute')?.addEventListener('click', async () => {
+      const g = state.activeGuideDetail || findGuide(state.activeGuideId);
+      const box = document.getElementById('modalTransportRouteResult');
+      const btn = document.getElementById('btnModalCheckTransportRoute');
+      if (!g || !box) return;
+      if (!g.lat || !g.lng) {
+        box.className = 'p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-amber-800';
+        box.textContent = 'Koordinat basecamp pemandu tidak tersedia.';
+        box.classList.remove('hidden');
+        return;
+      }
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Memuat Rute...';
+      }
+      box.className = 'p-2.5 rounded-xl bg-white border border-lokaleborder text-muted';
+      box.textContent = 'Memeriksa rekomendasi rute Transport API...';
+      box.classList.remove('hidden');
+
+      try {
+        const resp = await global.SumutGoApi.transport.rekomendasiWisata({
+          user_lat: Number(state.refLat),
+          user_lng: Number(state.refLng),
+          wisata_lat: Number(g.lat),
+          wisata_lng: Number(g.lng),
+          nama_wisata: g.destName || g.name,
+          trip_type: 'roundtrip',
+        }, 'POST');
+        const data = resp?.data || {};
+        const list = extractTransportArray(data, ['rekomendasi', 'opsi', 'routes', 'rute', 'hasil']);
+        const top = list.length ? list[0] : data;
+        const cost = Number(top?.total_biaya ?? top?.estimasi_biaya ?? top?.total_tarif ?? top?.tarif ?? 0);
+        const jarak = top?.total_jarak_km ?? top?.jarak_km ?? top?.distance_km ?? null;
+        const summary = top?.ringkasan || top?.summary || `Rute PP dari ${state.refLabel} ke ${g.destName || g.name}`;
+        const noteText = `[Transport API] ${summary}${jarak !== null ? ` (~${Number(jarak).toFixed(1)} km)` : ''}, est. ${formatIdr(cost)}.`;
+
+        box.className = 'p-2.5 rounded-xl bg-white border border-emerald-200 space-y-1.5';
+        box.innerHTML = `<div class="flex flex-wrap items-center justify-between gap-2">
+            <strong class="text-ink">${escapeHtml(summary)}</strong>
+            <strong class="font-mono text-lokale">${formatIdr(cost)}</strong>
+          </div>
+          <div class="flex justify-end">
+            <button type="button" id="btnCopyRouteToNotes" class="px-2.5 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white border border-lokaleborder text-[10px] font-semibold transition">Tempel ke Catatan Booking</button>
+          </div>`;
+        document.getElementById('btnCopyRouteToNotes')?.addEventListener('click', () => {
+          const notesInput = document.getElementById('bookNotes');
+          if (notesInput) {
+            notesInput.value = notesInput.value ? `${notesInput.value} | ${noteText}` : noteText;
+          }
+          global.SumutGoAuth?.showToast('Rekomendasi transport disalin ke catatan booking.', 'success');
+        });
+      } catch (err) {
+        box.className = 'p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-700';
+        box.textContent = err.message || 'Gagal memuat estimasi Transport API.';
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.textContent = 'Cek Rute ke Lokasi Pemandu';
+        }
+      }
     });
 
     document.querySelectorAll('.eco-tab-btn').forEach((b) => {
@@ -2640,13 +3343,23 @@
       if (val) copyPhoneText(val, 'Nomor HP');
     });
 
-    // Compare Modal
-    document.getElementById('btnToggleCompareModal')?.addEventListener('click', openCompareModal);
+    // Compare Modal (Wajib login & simpan per akun)
+    document.getElementById('btnToggleCompareModal')?.addEventListener('click', () => {
+      if (!isLoggedIn()) {
+        global.SumutGoAuth?.openAuthModal(
+          'login',
+          'Masuk untuk mengakses fitur pembanding pemandu wisata sesuai akun Anda.'
+        );
+        return;
+      }
+      openCompareModal();
+    });
     document.getElementById('btnCloseCompareModal')?.addEventListener('click', () => {
       document.getElementById('compareModal')?.classList.add('hidden');
     });
     document.getElementById('btnClearCompare')?.addEventListener('click', () => {
       state.compareList = [];
+      saveCompareList();
       document.getElementById('compareModal')?.classList.add('hidden');
       renderDirectory();
     });
@@ -2717,6 +3430,9 @@
         await global.SumutGoAuth.init();
       } catch (err) {
         console.error('[SumutGoApp] Auth init error:', err);
+      }
+      if (isLoggedIn()) {
+        loadCompareList();
       }
     }
 

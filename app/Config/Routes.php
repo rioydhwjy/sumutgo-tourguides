@@ -9,13 +9,13 @@ $routes->get('/', 'TourGuideController::index');
 $routes->get('tour-guides', 'TourGuideController::index');
 $routes->get('admin', 'TourGuideController::admin');
 
-// Legacy API endpoints (backward compatibility)
+// Legacy API endpoints (backward compatibility — mutating routes tetap wajib JWT & RBAC)
 $routes->group('api', ['namespace' => 'App\Controllers\Api'], static function (RouteCollection $routes): void {
     $routes->get('tour-guides', 'TourGuideApiController::index');
     $routes->get('tour-guides/stats', 'TourGuideApiController::stats');
     $routes->get('tour-guides/(:segment)', 'TourGuideApiController::show/$1');
-    $routes->post('tour-guides/(:segment)/book', 'TourGuideApiController::book/$1');
-    $routes->put('tour-guides/(:segment)/status', 'TourGuideApiController::updateStatus/$1');
+    $routes->post('tour-guides/(:segment)/book', 'TourGuideApiController::book/$1', ['filter' => ['jwt', 'role:wisatawan,admin']]);
+    $routes->put('tour-guides/(:segment)/status', 'TourGuideApiController::updateStatus/$1', ['filter' => ['jwt', 'role:admin']]);
 });
 
 // ====================================================================
@@ -79,4 +79,24 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\V1'], static funct
     // 7. Analytics & Audit Logs (Admin Audit Trail & Public Stats)
     $routes->get('audit-logs', 'AnalyticsController::auditLogs', ['filter' => ['jwt', 'role:admin']]);
     $routes->get('stats', 'AnalyticsController::stats');
+
+    // 8. Proxy Layanan Eksternal Transport Application API (X-API-KEY disimpan aman di server)
+    $routes->group('transport', static function (RouteCollection $routes): void {
+        $routes->get('status', 'TransportProxyController::status');
+        $routes->get('transports', 'TransportProxyController::transports', ['filter' => 'ratelimit:90,60']);
+        $routes->get('lokasi', 'TransportProxyController::lokasi', ['filter' => 'ratelimit:90,60']);
+        $routes->get('tarif', 'TransportProxyController::tarif', ['filter' => 'ratelimit:90,60']);
+        $routes->get('rekomendasi-wisata', 'TransportProxyController::rekomendasiWisata', ['filter' => 'ratelimit:60,60']);
+        $routes->post('rekomendasi-wisata', 'TransportProxyController::rekomendasiWisata', ['filter' => 'ratelimit:60,60']);
+        $routes->get('master/(:segment)', 'TransportProxyController::masterIndex/$1', ['filter' => 'ratelimit:60,60']);
+
+        $routes->group('admin', ['filter' => ['jwt', 'role:admin']], static function (RouteCollection $routes): void {
+            $routes->get('(:segment)', 'TransportProxyController::adminIndex/$1');
+            $routes->get('(:segment)/(:num)', 'TransportProxyController::adminShow/$1/$2');
+            $routes->post('(:segment)', 'TransportProxyController::adminCreate/$1');
+            $routes->put('(:segment)/(:num)', 'TransportProxyController::adminUpdate/$1/$2');
+            $routes->patch('(:segment)/(:num)', 'TransportProxyController::adminUpdate/$1/$2');
+            $routes->delete('(:segment)/(:num)', 'TransportProxyController::adminDelete/$1/$2');
+        });
+    });
 });

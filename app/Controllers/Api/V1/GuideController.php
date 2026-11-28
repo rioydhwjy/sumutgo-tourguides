@@ -4,6 +4,7 @@ namespace App\Controllers\Api\V1;
 
 use App\Libraries\DbTransactionRunner;
 use App\Libraries\PgErrorMapper;
+use App\Libraries\PhoneNormalizer;
 use App\Models\TourGuideModel;
 use CodeIgniter\HTTP\ResponseInterface;
 use Throwable;
@@ -65,14 +66,29 @@ class GuideController extends BaseApiController
         $payload = $this->getJsonPayload();
 
         $rules = [
-            'guide_name'        => 'required|min_length[3]|max_length[100]',
-            'phone_number'      => 'required',
-            'daily_rate_idr'    => 'required|numeric|greater_than[0]',
-            'specialization_id' => 'required|numeric',
+            'guide_name'              => 'required|min_length[3]|max_length[150]',
+            'phone_number'            => 'required|min_length[8]|max_length[25]',
+            'daily_rate_idr'          => 'required|numeric|greater_than[0]',
+            'specialization_id'       => 'required|numeric',
+            'primary_destination_id'  => 'required|numeric',
+            'recommended_culinary_id' => 'required|numeric',
+            'partner_hotel_id'        => 'required|numeric',
+            'default_transport_id'    => 'required|numeric',
+            'availability_status'     => 'permit_empty|in_list[Tersedia,Sedang Bertugas,Booked]',
+            'gmaps_rating'            => 'permit_empty|numeric|greater_than_equal_to[0]|less_than_equal_to[5]',
+            'latitude'                => 'permit_empty|numeric',
+            'longitude'               => 'permit_empty|numeric',
         ];
 
         if (! $this->validateData($payload, $rules)) {
             return $this->respondError('Validasi data pemandu wisata gagal.', 422, $this->getValidationErrors());
+        }
+
+        $normalizedPhone = PhoneNormalizer::normalize((string) ($payload['phone_number'] ?? ''));
+        if (! PhoneNormalizer::isValid($normalizedPhone)) {
+            return $this->respondError('Format nomor telepon pemandu tidak valid.', 422, [
+                'phone_number' => 'Gunakan nomor HP Indonesia/internasional yang valid, contoh: 081234567890 atau +6281234567890.',
+            ]);
         }
 
         $languageIds = $payload['language_ids'] ?? [];
@@ -101,12 +117,32 @@ class GuideController extends BaseApiController
     {
         $payload = $this->getJsonPayload();
 
-        if (! isset($payload['version'])) {
-            return $this->respondError(
-                "Field 'version' wajib disertakan untuk mekanisme concurrency control (Optimistic Locking).",
-                422,
-                ['version' => 'Versi data saat ini wajib dikirim.']
-            );
+        $rules = [
+            'version'                 => 'required|integer',
+            'guide_name'              => 'permit_empty|min_length[3]|max_length[150]',
+            'phone_number'            => 'permit_empty|min_length[8]|max_length[25]',
+            'daily_rate_idr'          => 'permit_empty|numeric|greater_than[0]',
+            'availability_status'     => 'permit_empty|in_list[Tersedia,Sedang Bertugas,Booked]',
+            'specialization_id'       => 'permit_empty|numeric',
+            'primary_destination_id'  => 'permit_empty|numeric',
+            'recommended_culinary_id' => 'permit_empty|numeric',
+            'partner_hotel_id'        => 'permit_empty|numeric',
+            'default_transport_id'    => 'permit_empty|numeric',
+            'latitude'                => 'permit_empty|numeric',
+            'longitude'               => 'permit_empty|numeric',
+        ];
+
+        if (! $this->validateData($payload, $rules)) {
+            return $this->respondError('Validasi data pembaruan pemandu gagal.', 422, $this->getValidationErrors());
+        }
+
+        if (isset($payload['phone_number'])) {
+            $normalizedPhone = PhoneNormalizer::normalize((string) $payload['phone_number']);
+            if (! PhoneNormalizer::isValid($normalizedPhone)) {
+                return $this->respondError('Format nomor telepon pemandu tidak valid.', 422, [
+                    'phone_number' => 'Gunakan nomor HP Indonesia/internasional yang valid, contoh: 081234567890 atau +6281234567890.',
+                ]);
+            }
         }
 
         $expectedVersion = (int) $payload['version'];

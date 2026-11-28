@@ -260,6 +260,66 @@
     stats() {
       return request('/stats', { method: 'GET' });
     },
+
+    transport: {
+      status() {
+        return request('/transport/status', { method: 'GET', handleUnauthorized: false });
+      },
+      transports() {
+        return request('/transport/transports', { method: 'GET', handleUnauthorized: false });
+      },
+      lokasi(params = {}) {
+        return request(`/transport/lokasi${buildQueryString(params)}`, { method: 'GET', handleUnauthorized: false });
+      },
+      tarif(params = {}) {
+        return request(`/transport/tarif${buildQueryString(params)}`, { method: 'GET', handleUnauthorized: false });
+      },
+      rekomendasiWisata(payload = {}, method = 'POST') {
+        const upper = String(method || 'POST').toUpperCase() === 'GET' ? 'GET' : 'POST';
+        if (upper === 'GET') {
+          return request(`/transport/rekomendasi-wisata${buildQueryString(payload)}`, {
+            method: 'GET',
+            handleUnauthorized: false,
+          });
+        }
+        return request('/transport/rekomendasi-wisata', {
+          method: 'POST',
+          body: payload,
+          handleUnauthorized: false,
+        });
+      },
+      master(resource, params = {}) {
+        return request(`/transport/master/${encodeURIComponent(resource)}${buildQueryString(params)}`, {
+          method: 'GET',
+          handleUnauthorized: false,
+        });
+      },
+      admin: {
+        list(resource, params = {}) {
+          return request(`/transport/admin/${encodeURIComponent(resource)}${buildQueryString(params)}`, { method: 'GET' });
+        },
+        show(resource, id) {
+          return request(`/transport/admin/${encodeURIComponent(resource)}/${encodeURIComponent(id)}`, { method: 'GET' });
+        },
+        create(resource, payload) {
+          return request(`/transport/admin/${encodeURIComponent(resource)}`, {
+            method: 'POST',
+            body: payload,
+          });
+        },
+        update(resource, id, payload) {
+          return request(`/transport/admin/${encodeURIComponent(resource)}/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            body: payload,
+          });
+        },
+        remove(resource, id) {
+          return request(`/transport/admin/${encodeURIComponent(resource)}/${encodeURIComponent(id)}`, {
+            method: 'DELETE',
+          });
+        },
+      },
+    },
   };
 
   global.SumutGoApi = SumutGoApi;

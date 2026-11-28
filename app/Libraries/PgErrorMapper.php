@@ -83,7 +83,25 @@ class PgErrorMapper
             ];
         }
 
-        // 5. Check Constraint - 23514
+        // 5. Not Null Violation - 23502
+        if (str_contains($msg, '23502') || str_contains($msg, 'null value in column')) {
+            return [
+                'statusCode' => 422,
+                'message'    => 'Terdapat field wajib yang belum diisi atau bernilai kosong.',
+                'errors'     => null,
+            ];
+        }
+
+        // 5b. Invalid Text Representation / Syntax (mis. integer/date tidak valid) - 22P02
+        if (str_contains($msg, '22P02') || str_contains($msg, 'invalid input syntax')) {
+            return [
+                'statusCode' => 422,
+                'message'    => 'Format nilai parameter atau tipe data yang dikirim tidak valid.',
+                'errors'     => null,
+            ];
+        }
+
+        // 6. Check Constraint - 23514
         if (str_contains($msg, '23514') || str_contains($msg, 'check constraint')) {
             if (str_contains($msg, 'chk_bookings_dates')) {
                 return [
@@ -99,11 +117,39 @@ class PgErrorMapper
                     'errors'     => ['number_of_guests' => 'Jumlah tamu minimal 1.'],
                 ];
             }
-            if (str_contains($msg, 'chk_guides_daily_rate')) {
+            if (str_contains($msg, 'chk_guides_rate') || str_contains($msg, 'chk_guides_daily_rate')) {
                 return [
                     'statusCode' => 422,
                     'message'    => 'Tarif harian harus bernilai positif.',
-                    'errors'     => ['daily_rate_idr' => 'Tarif harian harus > 0.'],
+                    'errors'     => ['daily_rate_idr' => 'Tarif harian tidak valid.'],
+                ];
+            }
+            if (str_contains($msg, 'chk_guides_rating')) {
+                return [
+                    'statusCode' => 422,
+                    'message'    => 'Rating harus berada di rentang 0.0 hingga 5.0.',
+                    'errors'     => ['gmaps_rating' => 'Nilai rating harus antara 0.0 dan 5.0.'],
+                ];
+            }
+            if (str_contains($msg, 'chk_guides_status')) {
+                return [
+                    'statusCode' => 422,
+                    'message'    => "Status ketersediaan harus salah satu dari: 'Tersedia', 'Sedang Bertugas', atau 'Booked'.",
+                    'errors'     => ['availability_status' => 'Status pemandu tidak valid.'],
+                ];
+            }
+            if (str_contains($msg, 'chk_reviews_rating')) {
+                return [
+                    'statusCode' => 422,
+                    'message'    => 'Rating ulasan harus bernilai antara 1 hingga 5.',
+                    'errors'     => ['rating' => 'Rating harus 1 s.d. 5.'],
+                ];
+            }
+            if (str_contains($msg, 'chk_users_role')) {
+                return [
+                    'statusCode' => 422,
+                    'message'    => "Role pengguna harus salah satu dari: 'admin', 'wisatawan', atau 'guide'.",
+                    'errors'     => ['role' => 'Role tidak valid.'],
                 ];
             }
             if (str_contains($msg, 'chk_guides_phone') || str_contains($msg, 'chk_users_phone') || str_contains($msg, 'chk_booking_contacts_phone')) {
@@ -121,8 +167,13 @@ class PgErrorMapper
             ];
         }
 
-        // 6. User-defined exception from Trigger/Stored Procedure - P0001 / RAISE
-        if (str_contains($msg, 'P0001') || str_contains($msg, 'raise_exception') || str_contains($msg, 'fn_trg_') || str_contains($msg, 'PL/pgSQL function') || str_contains($msg, 'completed')) {
+        // 7. User-defined exception from Trigger/Stored Procedure - P0001..P0007 / RAISE
+        if (
+            str_contains($msg, 'P0001') || str_contains($msg, 'P0002') || str_contains($msg, 'P0003')
+            || str_contains($msg, 'P0004') || str_contains($msg, 'P0005') || str_contains($msg, 'P0006')
+            || str_contains($msg, 'P0007') || str_contains($msg, 'raise_exception')
+            || str_contains($msg, 'fn_trg_') || str_contains($msg, 'PL/pgSQL function')
+        ) {
             // Extract readable error message
             $cleanMsg = 'Aturan bisnis ditolak oleh server.';
             if (preg_match('/ERROR:\s*(.*?)(?:\n|CONTEXT:|$)/i', $msg, $matches)) {
@@ -138,7 +189,7 @@ class PgErrorMapper
             ];
         }
 
-        // 7. Insufficient Privilege / RLS - 42501
+        // 8. Insufficient Privilege / RLS - 42501
         if (str_contains($msg, '42501') || str_contains($msg, 'permission denied')) {
             return [
                 'statusCode' => 403,
@@ -147,7 +198,7 @@ class PgErrorMapper
             ];
         }
 
-        // 8. Unexpected Error -> Log internal details, NEVER leak stack trace
+        // 9. Unexpected Error -> Log internal details, NEVER leak stack trace
         log_message('error', '[PG_ERROR_MAPPER] Unexpected error: ' . $msg . "\n" . $e->getTraceAsString());
 
         return [

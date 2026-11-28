@@ -2,8 +2,12 @@
 
 namespace App\Controllers\Api;
 
+use App\Libraries\AuthContext;
+use App\Libraries\DbTransactionRunner;
+use App\Libraries\PgErrorMapper;
 use App\Models\TourGuideModel;
 use CodeIgniter\RESTful\ResourceController;
+use Throwable;
 
 class TourGuideApiController extends ResourceController
 {
@@ -91,12 +95,18 @@ class TourGuideApiController extends ResourceController
         $traveler = trim((string) ($payload['traveler_name'] ?? 'Wisatawan'));
         $tourDate = trim((string) ($payload['tour_date'] ?? date('Y-m-d')));
         $days     = max(1, (int) ($payload['duration_days'] ?? 1));
+        $userId   = AuthContext::getUserId();
 
-        $model->update($guide['guide_id'], [
-            'availability_status' => 'Booked',
-        ]);
-
-        $updated = $model->getGuideDetail($guide['guide_id']);
+        try {
+            $updated = DbTransactionRunner::runAsRole('role_sumutgo_admin', $userId, static function () use ($model, $guide) {
+                $model->update($guide['guide_id'], [
+                    'availability_status' => 'Booked',
+                ]);
+                return $model->getGuideDetail($guide['guide_id']);
+            });
+        } catch (Throwable $e) {
+            return PgErrorMapper::toResponse($e);
+        }
 
         return $this->respond([
             'status'  => 200,
@@ -136,14 +146,23 @@ class TourGuideApiController extends ResourceController
             return $this->failValidationErrors('Status harus salah satu dari: Tersedia, Sedang Bertugas, atau Booked.');
         }
 
-        $model->update($guide['guide_id'], [
-            'availability_status' => $newStatus,
-        ]);
+        $userId = AuthContext::getUserId();
+
+        try {
+            $updated = DbTransactionRunner::runAsRole('role_sumutgo_admin', $userId, static function () use ($model, $guide, $newStatus) {
+                $model->update($guide['guide_id'], [
+                    'availability_status' => $newStatus,
+                ]);
+                return $model->getGuideDetail($guide['guide_id']);
+            });
+        } catch (Throwable $e) {
+            return PgErrorMapper::toResponse($e);
+        }
 
         return $this->respond([
             'status'  => 200,
             'message' => "Status {$guide['id']} berhasil diperbarui menjadi {$newStatus}.",
-            'data'    => $model->getGuideDetail($guide['guide_id']),
+            'data'    => $updated,
         ]);
     }
 }
