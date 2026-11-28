@@ -12,8 +12,8 @@ class TourGuideController extends BaseController
         $model = new TourGuideModel();
         $masterModel = new MasterDataModel();
 
-        // 1. Ambil 150 pemandu dari view vw_guides_detail
-        $res = $model->getFilteredGuides([], 1, 150);
+        // 1. Ambil daftar pemandu dari view vw_guides_detail
+        $res = $model->getFilteredGuides([], 1, 500);
         $guides = $res['items'];
 
         // 2. Ambil statistik ringkasan
@@ -43,7 +43,7 @@ class TourGuideController extends BaseController
     public function admin(): string
     {
         $model = new TourGuideModel();
-        $res = $model->getFilteredGuides([], 1, 150);
+        $res = $model->getFilteredGuides([], 1, 500);
         $guides = $res['items'];
         $stats = $model->getSummaryStats();
 

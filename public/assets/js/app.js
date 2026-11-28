@@ -114,9 +114,9 @@
     compareList: [],
     activeGuideId: 'TG-001',
     activeGuideDetail: null,
-    refLat: 3.5612,
-    refLng: 98.6564,
-    refLabel: 'Politeknik Negeri Medan',
+    refLat: 3.5952,
+    refLng: 98.6722,
+    refLabel: 'Pusat Kota Medan',
     userLat: null,
     userLng: null,
     selectedMapGuideId: null,
@@ -151,7 +151,11 @@
   let transportMarkersLayer = null;
   let guideMarkersById = {};
   let userLocationMarker = null;
-  let chartsInitialized = false;
+  const chartInstances = {
+    specs: null,
+    langs: null,
+    statuses: null,
+  };
 
   const formatIdr = (n) => 'Rp ' + Number(n || 0).toLocaleString('id-ID');
   const escapeHtml = (v) => String(v ?? '').replace(/[&<>"']/g, (ch) => ({
@@ -202,12 +206,15 @@
     const dateText = hasDate ? formatDateId(rawEnd.slice(0, 10)) : '';
     if (!hasDate && !isBusyStatus) return null;
     const prefix = status === 'Sedang Bertugas' ? 'Bertugas s.d.' : isBusyStatus ? 'Booked s.d.' : 'Jadwal s.d.';
+    const missingDateText = status === 'Booked'
+      ? 'Status Booked (tgl selesai belum tercatat)'
+      : 'Sedang bertugas (tgl selesai belum tercatat)';
     return {
       isBusyStatus,
       hasDate,
       dateText,
       shortText: hasDate ? `s.d. ${dateText}` : '',
-      fullText: hasDate ? `${prefix} ${dateText}` : 'Sedang bertugas (tgl selesai belum tercatat)',
+      fullText: hasDate ? `${prefix} ${dateText}` : missingDateText,
     };
   }
 
@@ -215,21 +222,16 @@
     const idEl = document.getElementById('modalGuideId');
     if (idEl) idEl.textContent = `${g.id} • ${g.status}`;
     const dutyMeta = getGuideDutyMeta(g);
-    let dutyEl = document.getElementById('modalGuideDutyUntil');
+    const dutyEl = document.getElementById('modalGuideDutyUntil');
+    if (!dutyEl) return;
     if (dutyMeta) {
-      if (!dutyEl && idEl && idEl.parentNode) {
-        dutyEl = document.createElement('span');
-        dutyEl.id = 'modalGuideDutyUntil';
-        idEl.parentNode.appendChild(dutyEl);
-      }
-      if (dutyEl) {
-        dutyEl.className = dutyMeta.hasDate
-          ? 'ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold'
-          : 'ml-2 inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-muted text-[10px] font-medium';
-        dutyEl.textContent = dutyMeta.fullText;
-        dutyEl.classList.remove('hidden');
-      }
-    } else if (dutyEl) {
+      dutyEl.className = dutyMeta.hasDate
+        ? 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-50 border border-amber-200 text-amber-700 text-[10px] font-semibold'
+        : 'inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-muted text-[10px] font-medium';
+      dutyEl.textContent = dutyMeta.fullText;
+      dutyEl.classList.remove('hidden');
+    } else {
+      dutyEl.textContent = '';
       dutyEl.classList.add('hidden');
     }
   }
@@ -633,10 +635,6 @@
         state.refLabel = 'Lokasi Saya';
         state.selectedMapGuideId = null;
 
-        document.querySelectorAll('.landmark-btn').forEach((b) => {
-          b.className = 'landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition';
-        });
-
         setLocateButtonLoading(false);
         setMapLocationStatus('Peta difokuskan ke lokasi Anda saat ini.', 'success');
         renderMap();
@@ -775,9 +773,6 @@
         state.refLng = Number(e.latlng.lng.toFixed(4));
         state.refLabel = `Titik Peta (${state.refLat}, ${state.refLng})`;
         setMapLocationStatus('');
-        document.querySelectorAll('.landmark-btn').forEach((btn) => {
-          btn.className = 'landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition';
-        });
         renderMap();
       });
     }
@@ -1476,57 +1471,69 @@
   // =========================================================================
   // EKOSISTEM & GRAFIK
   // =========================================================================
+  function updateAnalyticsCharts() {
+    if (!global.Chart) return;
+    const specsCanvas = document.getElementById('chartSpecializations');
+    const langsCanvas = document.getElementById('chartLanguages');
+    const statusesCanvas = document.getElementById('chartStatuses');
+    if (!specsCanvas || !langsCanvas || !statusesCanvas) return;
+
+    const sc = {};
+    const ss = {};
+    const lc = {};
+    const st = { Tersedia: 0, 'Sedang Bertugas': 0, Booked: 0 };
+    TOUR_GUIDES.forEach((g) => {
+      sc[g.specialization] = (sc[g.specialization] || 0) + 1;
+      ss[g.specialization] = (ss[g.specialization] || 0) + g.price;
+      st[g.status] = (st[g.status] || 0) + 1;
+      getLangNames(g).forEach((l) => {
+        lc[l] = (lc[l] || 0) + 1;
+      });
+    });
+    const sortedLangs = Object.entries(lc).sort((a, b) => b[1] - a[1]);
+
+    if (chartInstances.specs) chartInstances.specs.destroy();
+    if (chartInstances.langs) chartInstances.langs.destroy();
+    if (chartInstances.statuses) chartInstances.statuses.destroy();
+
+    chartInstances.specs = new Chart(specsCanvas, {
+      type: 'bar',
+      data: {
+        labels: Object.keys(sc).map((s) => s.split('&')[0].trim()),
+        datasets: [{
+          label: 'Rata-rata (Ribu Rp)',
+          data: Object.keys(sc).map((s) => Math.round(ss[s] / sc[s] / 1000)),
+          backgroundColor: '#07779d',
+          borderRadius: 8,
+        }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+    });
+    chartInstances.langs = new Chart(langsCanvas, {
+      type: 'bar',
+      data: {
+        labels: sortedLangs.map(([l]) => l),
+        datasets: [{
+          label: 'Jumlah Pemandu',
+          data: sortedLangs.map(([, c]) => c),
+          backgroundColor: '#389ec0',
+          borderRadius: 8,
+        }],
+      },
+      options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
+    });
+    chartInstances.statuses = new Chart(statusesCanvas, {
+      type: 'doughnut',
+      data: {
+        labels: Object.keys(st),
+        datasets: [{ data: Object.values(st), backgroundColor: ['#07779d', '#f59e0b', '#e11d48'] }],
+      },
+      options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
+    });
+  }
+
   function renderAnalytics() {
-    if (!chartsInitialized && global.Chart) {
-      chartsInitialized = true;
-      const sc = {};
-      const ss = {};
-      const lc = {};
-      const st = { Tersedia: 0, 'Sedang Bertugas': 0, Booked: 0 };
-      TOUR_GUIDES.forEach((g) => {
-        sc[g.specialization] = (sc[g.specialization] || 0) + 1;
-        ss[g.specialization] = (ss[g.specialization] || 0) + g.price;
-        st[g.status] = (st[g.status] || 0) + 1;
-        getLangNames(g).forEach((l) => {
-          lc[l] = (lc[l] || 0) + 1;
-        });
-      });
-      const sortedLangs = Object.entries(lc).sort((a, b) => b[1] - a[1]);
-      new Chart(document.getElementById('chartSpecializations'), {
-        type: 'bar',
-        data: {
-          labels: Object.keys(sc).map((s) => s.split('&')[0].trim()),
-          datasets: [{
-            label: 'Rata-rata (Ribu Rp)',
-            data: Object.keys(sc).map((s) => Math.round(ss[s] / sc[s] / 1000)),
-            backgroundColor: '#07779d',
-            borderRadius: 8,
-          }],
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
-      });
-      new Chart(document.getElementById('chartLanguages'), {
-        type: 'bar',
-        data: {
-          labels: sortedLangs.map(([l]) => l),
-          datasets: [{
-            label: 'Jumlah Pemandu',
-            data: sortedLangs.map(([, c]) => c),
-            backgroundColor: '#389ec0',
-            borderRadius: 8,
-          }],
-        },
-        options: { indexAxis: 'y', responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } },
-      });
-      new Chart(document.getElementById('chartStatuses'), {
-        type: 'doughnut',
-        data: {
-          labels: Object.keys(st),
-          datasets: [{ data: Object.values(st), backgroundColor: ['#07779d', '#f59e0b', '#e11d48'] }],
-        },
-        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom' } } },
-      });
-    }
+    updateAnalyticsCharts();
     renderEco();
   }
 
@@ -1579,24 +1586,30 @@
   // =========================================================================
   // GUIDE DETAIL MODAL + BLUR GATE + MULTI-DAY BOOKING FLOW
   // =========================================================================
-  function populateBookingMasterSelects(guide) {
+  function populateBookingMasterSelects(guide, preserveSelection = false) {
     const destSelect = document.getElementById('bookDestinationId');
     const transSelect = document.getElementById('bookTransportId');
 
     if (destSelect) {
+      const prevDest = preserveSelection ? destSelect.value : '';
       const dests = MASTER_ECOSYSTEM.destinations || [];
       destSelect.innerHTML = `<option value="">Sesuai Destinasi Utama Pemandu</option>` +
         dests.map((d) => `<option value="${escapeHtml(d.destination_id)}">${escapeHtml(d.destination_code)} — ${escapeHtml(d.destination_name)}</option>`).join('');
-      if (guide?.primary_destination?.id) {
+      if (prevDest && Array.from(destSelect.options).some((o) => o.value === prevDest)) {
+        destSelect.value = prevDest;
+      } else if (guide?.primary_destination?.id) {
         destSelect.value = String(guide.primary_destination.id);
       }
     }
 
     if (transSelect) {
+      const prevTrans = preserveSelection ? transSelect.value : '';
       const transports = MASTER_ECOSYSTEM.transports || [];
       transSelect.innerHTML = `<option value="">Sesuai Armada Default Pemandu</option>` +
         transports.map((t) => `<option value="${escapeHtml(t.transport_id)}">${escapeHtml(t.transport_code)} — ${escapeHtml(t.transport_name)}</option>`).join('');
-      if (guide?.default_transport?.id) {
+      if (prevTrans && Array.from(transSelect.options).some((o) => o.value === prevTrans)) {
+        transSelect.value = prevTrans;
+      } else if (guide?.default_transport?.id) {
         transSelect.value = String(guide.default_transport.id);
       }
     }
@@ -1764,7 +1777,7 @@
     });
   }
 
-  function populateGuideModalData(g) {
+  function populateGuideModalData(g, opts = {}) {
     state.activeGuideId = g.id;
     state.activeGuideDetail = g;
 
@@ -1804,7 +1817,7 @@
     document.getElementById('modalTransName').textContent = g.transportName || '-';
 
     renderGuideRecentReviews(g);
-    populateBookingMasterSelects(g);
+    populateBookingMasterSelects(g, Boolean(opts.preserveSelection));
 
     const mpEl = document.getElementById('bookMeetingPoint');
     if (mpEl) {
@@ -1880,7 +1893,7 @@
       const resp = await global.SumutGoApi.guides.detail(g.id);
       if (resp?.data && state.activeGuideId === g.id) {
         updateGuideInCache(resp.data);
-        populateGuideModalData(resp.data);
+        populateGuideModalData(resp.data, { preserveSelection: true });
         applyGuideModalBlurState();
       }
     } catch (_) {
@@ -2044,14 +2057,19 @@
       setBookingStep('success');
       global.SumutGoAuth.showToast(`Booking ${created.booking_code || ''} berhasil diajukan!`, 'success');
 
-      // Refresh status guide dari REST API v1
+      // Refresh status guide & seluruh UI terkait dari REST API v1
       try {
         const freshGuide = await global.SumutGoApi.guides.detail(g.id);
         if (freshGuide?.data) {
+          state.activeGuideDetail = freshGuide.data;
           updateGuideInCache(freshGuide.data);
           updateModalGuideStatus(freshGuide.data);
           renderDirectory();
           if (state.activeTab === 'map') renderMap({ preserveListScroll: true });
+          if (state.activeTab === 'analytics') updateAnalyticsCharts();
+          updatePlanner();
+          const compModal = document.getElementById('compareModal');
+          if (compModal && !compModal.classList.contains('hidden')) openCompareModal();
         }
       } catch (_) {
         // Ignore refresh failures
@@ -2455,7 +2473,7 @@
             cancel_reason: reason.trim() || 'Dibatalkan oleh pengguna',
           });
           global.SumutGoAuth.showToast('Reservasi berhasil dibatalkan.', 'info');
-          await loadMyBookings();
+          await Promise.all([loadMyBookings(), syncCatalogFromApiV1()]);
         } catch (err) {
           global.SumutGoAuth.showToast(err.message || 'Gagal membatalkan reservasi.', 'error');
           btn.disabled = false;
@@ -2475,7 +2493,7 @@
             version,
           });
           global.SumutGoAuth.showToast(`Status booking diperbarui menjadi ${nextStatus}.`, 'success');
-          await loadMyBookings();
+          await Promise.all([loadMyBookings(), syncCatalogFromApiV1()]);
         } catch (err) {
           global.SumutGoAuth.showToast(err.message || 'Gagal memperbarui status.', 'error');
           btn.disabled = false;
@@ -2547,7 +2565,7 @@
             review_text: reviewText,
           });
           global.SumutGoAuth.showToast('Terima kasih! Ulasan Anda berhasil disimpan.', 'success');
-          await loadMyBookings();
+          await Promise.all([loadMyBookings(), syncCatalogFromApiV1()]);
         } catch (err) {
           global.SumutGoAuth.showToast(err.message || 'Gagal mengirim ulasan.', 'error');
           if (submitBtn) submitBtn.disabled = false;
@@ -2563,9 +2581,12 @@
     const authed = isLoggedIn();
     const items = state.compareList.map((id) => findGuide(id)).filter(Boolean);
     const colClass = items.length === 1 ? 'md:grid-cols-1' : items.length === 2 ? 'md:grid-cols-2' : 'md:grid-cols-3';
+    const fullNotice = items.length >= 3
+      ? '<div class="mb-3 px-3.5 py-2 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] font-semibold">Slot pembanding penuh (maksimal 3/3 pemandu). Hapus salah satu pemandu terlebih dahulu sebelum menambahkan pemandu lain.</div>'
+      : '';
 
     document.getElementById('compareModalBody').innerHTML = items.length
-      ? `<div class="grid grid-cols-1 ${colClass} gap-4">` + items.map((g) => {
+      ? `${fullNotice}<div class="grid grid-cols-1 ${colClass} gap-4">` + items.map((g) => {
           const dutyMeta = getGuideDutyMeta(g);
           const dutyUntilHtml = dutyMeta
             ? (dutyMeta.hasDate
@@ -2923,7 +2944,7 @@
               const resp = await global.SumutGoApi.bookings.updateStatus(bookingId, payload);
               setAdminConfirmFeedback(resp.message || `Booking diperbarui menjadi ${nextStatus}.`, false);
               global.SumutGoAuth?.showToast(`Status booking diperbarui menjadi ${nextStatus}.`, 'success');
-              await loadAdminConfirmData();
+              await Promise.all([loadAdminConfirmData(), syncCatalogFromApiV1()]);
             } catch (err) {
               setAdminConfirmFeedback(err.message || 'Gagal memperbarui status booking.', true);
               btn.disabled = false;
@@ -2989,17 +3010,32 @@
   async function syncCatalogFromApiV1() {
     try {
       const [guidesResp, masterResp] = await Promise.all([
-        global.SumutGoApi.guides.list({ page: 1, per_page: 150 }),
+        global.SumutGoApi.guides.list({ page: 1, per_page: 500 }),
         global.SumutGoApi.master.all(),
       ]);
+      if (masterResp?.data && typeof masterResp.data === 'object') {
+        MASTER_ECOSYSTEM = masterResp.data;
+      }
       if (Array.isArray(guidesResp?.data) && guidesResp.data.length) {
         TOUR_GUIDES = guidesResp.data;
         populateSelectOptionsFromGuides();
         renderDirectory();
+        updatePlanner();
         if (state.activeTab === 'map') renderMap({ preserveListScroll: true });
-      }
-      if (masterResp?.data && typeof masterResp.data === 'object') {
-        MASTER_ECOSYSTEM = masterResp.data;
+        if (state.activeTab === 'analytics' || chartInstances.statuses) updateAnalyticsCharts();
+
+        const guideModalEl = document.getElementById('guideModal');
+        if (guideModalEl && !guideModalEl.classList.contains('hidden') && state.activeGuideId) {
+          const freshActive = findGuide(state.activeGuideId);
+          if (freshActive) {
+            state.activeGuideDetail = Object.assign({}, state.activeGuideDetail || {}, freshActive);
+            updateModalGuideStatus(state.activeGuideDetail);
+          }
+        }
+        const compareModalEl = document.getElementById('compareModal');
+        if (compareModalEl && !compareModalEl.classList.contains('hidden')) {
+          openCompareModal();
+        }
       }
     } catch (_) {
       // Tetap gunakan data SSR bila sinkronisasi background gagal
@@ -3092,24 +3128,6 @@
       state.onlyFavorites = !state.onlyFavorites;
       switchTab('directory');
       renderDirectory();
-    });
-
-    document.querySelectorAll('.landmark-btn').forEach((b) => {
-      b.addEventListener('click', () => {
-        document.querySelectorAll('.landmark-btn').forEach((btn) => {
-          btn.className = btn === b
-            ? 'landmark-btn px-3.5 py-2 rounded-full bg-lokale text-white font-semibold text-xs transition'
-            : 'landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs transition';
-        });
-        const p = b.dataset.landmark.split(',');
-        state.refLat = parseFloat(p[0]);
-        state.refLng = parseFloat(p[1]);
-        state.refLabel = p.slice(2).join(',');
-        state.selectedMapGuideId = null;
-        setMapLocationStatus('');
-        if (leafletMap) leafletMap.setView([state.refLat, state.refLng], 12);
-        renderMap();
-      });
     });
 
     document.getElementById('chkMapOnlyAvailable')?.addEventListener('change', () => renderMap());

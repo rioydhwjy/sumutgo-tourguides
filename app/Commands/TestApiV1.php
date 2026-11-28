@@ -29,6 +29,8 @@ class TestApiV1 extends BaseCommand
     private string $adminToken = '';
     private string $touristToken = '';
     private ?int $touristUserId = null;
+    private ?array $testGuideBefore = null;
+    private string $testStartedAt = '';
 
     public function run(array $params): void
     {
@@ -37,6 +39,8 @@ class TestApiV1 extends BaseCommand
         CLI::write('====================================================================', 'cyan');
 
         $db = Database::connect();
+        $rowTime = $db->query('SELECT CURRENT_TIMESTAMP::text AS ts')->getRowArray();
+        $this->testStartedAt = (string) ($rowTime['ts'] ?? gmdate('Y-m-d H:i:sP'));
 
         try {
             // Skenario 1: Login Admin & Wisatawan (Dapat JWT 200)
@@ -369,6 +373,9 @@ class TestApiV1 extends BaseCommand
         // 4. Delete Guide Baru (Success 200)
         $delRes = $this->dispatch(GuideController::class, 'delete', 'DELETE', [], $this->adminToken, ['admin'], [$guideId], [], true);
         $passDelete = ($delRes['statusCode'] === 200);
+        if ($guideId > 0) {
+            $db->table('audit_logs')->where('entity_type', 'guide')->where('entity_id', $guideId)->delete();
+        }
         CLI::write("  - [DELETE] Guide dummy ID {$guideId} berhasil dihapus (HTTP 200)", 'white');
 
         $pass = ($createRes['statusCode'] === 201) && $passConflict && $passUpdate && $passDelete;
@@ -395,8 +402,13 @@ class TestApiV1 extends BaseCommand
     {
         CLI::write("\n[SKENARIO 9] POST /api/v1/bookings via ACID fn_create_booking & Auto Audit...", 'yellow');
 
-        // Bersihkan data booking uji sisa jika ada
+        // Bersihkan data booking uji sisa jika ada & catat status awal guide ID 10
         $db->table('bookings')->where('guide_id', 10)->where('start_date', '2027-04-10')->delete();
+        $this->testGuideBefore = $db->table('guides')
+            ->select('availability_status, version')
+            ->where('guide_id', 10)
+            ->get()
+            ->getRowArray() ?: null;
 
         // Wisatawan memesan guide ID 10 untuk rentang tanggal unik 2027-04-10 s.d. 2027-04-12 (3 hari)
         $res = $this->dispatch(BookingController::class, 'create', 'POST', [
@@ -513,6 +525,18 @@ class TestApiV1 extends BaseCommand
         // Pembersihan Data Uji Dummy agar database Supabase tetap bersih
         $db->table('audit_logs')->where('entity_type', 'booking')->where('entity_id', $bookingId)->delete();
         $db->table('bookings')->where('booking_id', $bookingId)->delete();
+        if (is_array($this->testGuideBefore)) {
+            $db->table('guides')->where('guide_id', 10)->update([
+                'availability_status' => $this->testGuideBefore['availability_status'],
+                'version'             => (int) $this->testGuideBefore['version'],
+            ]);
+            if ($this->testStartedAt !== '') {
+                $db->query(
+                    "DELETE FROM audit_logs WHERE entity_type = 'guide' AND entity_id = 10 AND changed_at >= ?::timestamptz",
+                    [$this->testStartedAt]
+                );
+            }
+        }
         CLI::write("  - Data reservasi uji coba ID {$bookingId} dan audit logs terkait telah dibersihkan.", 'cyan');
 
         $this->recordResult('Skenario 12: Review Guard Trigger P0001', $pass, 'Trigger trg_reviews_only_completed menolak ulasan sebelum status completed (422)');

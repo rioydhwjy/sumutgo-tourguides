@@ -182,7 +182,7 @@ class BookingContactModel extends Model
         $row['tourist_id']       = (int) $row['tourist_id'];
         $row['guide_id']         = (int) $row['guide_id'];
         $row['confirmed_by']     = $row['confirmed_by'] !== null ? (int) $row['confirmed_by'] : null;
-        $row['tourist_verified'] = ($row['tourist_verified'] === true || $row['tourist_verified'] === 't' || $row['tourist_verified'] === '1');
+        $row['tourist_verified'] = UserModel::toPgBool($row['tourist_verified'] ?? false);
         return $row;
     }
 }

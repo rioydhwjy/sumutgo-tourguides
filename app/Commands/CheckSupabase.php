@@ -17,11 +17,11 @@ class CheckSupabase extends BaseCommand
 {
     protected $group       = 'Database';
     protected $name        = 'db:check-supabase';
-    protected $description = 'Verifikasi koneksi Supabase PostgreSQL 16 (port 6543), status SSL, ekstensi, dan 12 tabel 3NF.';
+    protected $description = 'Verifikasi koneksi Supabase PostgreSQL (port 6543), status SSL, ekstensi, dan 13 tabel skema relasional.';
     protected $usage       = 'db:check-supabase';
 
     /**
-     * Daftar 12 tabel target skema 3NF
+     * Daftar 13 tabel target skema relasional
      */
     private array $targetTables = [
         'users',
@@ -34,6 +34,7 @@ class CheckSupabase extends BaseCommand
         'guides',
         'guide_languages',
         'bookings',
+        'booking_contacts',
         'reviews',
         'audit_logs',
     ];
@@ -135,8 +136,8 @@ class CheckSupabase extends BaseCommand
         }
         CLI::newLine();
 
-        // 5. Inspeksi 12 Tabel Target, RLS, dan Jumlah Baris
-        CLI::write('--- INSPEKSI 12 TABEL TARGET SKEMA 3NF ---', 'yellow');
+        // 5. Inspeksi 13 Tabel Target, RLS, dan Jumlah Baris
+        CLI::write('--- INSPEKSI 13 TABEL TARGET SKEMA RELASIONAL ---', 'yellow');
         $tableData = [];
         $missingCount = 0;
 
@@ -195,7 +196,7 @@ class CheckSupabase extends BaseCommand
             CLI::table($tableData, ['No', 'Nama Tabel', 'Status', 'RLS', 'Total Baris']);
 
             if ($missingCount === 0) {
-                CLI::write('[SUKSES] Semua 12 tabel target terdeteksi lengkap di Supabase!', 'green');
+                CLI::write('[SUKSES] Semua 13 tabel target terdeteksi lengkap di Supabase!', 'green');
             } else {
                 CLI::write("[PERINGATAN] Ada {$missingCount} tabel yang belum terdeteksi di Supabase. Pastikan DDL sudah dieksekusi.", 'red');
             }

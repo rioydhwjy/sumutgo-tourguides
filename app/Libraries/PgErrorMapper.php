@@ -66,6 +66,13 @@ class PgErrorMapper
                     'errors'     => ['guide_code' => 'Kode guide telah digunakan.'],
                 ];
             }
+            if (str_contains($msg, 'uq_guides_agency') || str_contains($msg, 'agency_name')) {
+                return [
+                    'statusCode' => 409,
+                    'message'    => 'Nama agensi pemandu wisata sudah terdaftar.',
+                    'errors'     => ['agency_name' => 'Nama agensi telah digunakan.'],
+                ];
+            }
 
             return [
                 'statusCode' => 409,

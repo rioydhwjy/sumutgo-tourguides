@@ -49,7 +49,7 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
 <body class="bg-lokalesoft/40 text-ink antialiased min-h-screen flex flex-col">
 
   <header class="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200/80">
-    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-18 py-3 flex items-center justify-between gap-4">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 min-h-[4.5rem] py-3 flex items-center justify-between gap-4">
       <div class="flex items-center gap-3">
         <a href="<?= site_url('/') ?>" class="flex items-center gap-2.5">
           <div class="w-9 h-9 rounded-full bg-lokale text-white flex items-center justify-center shadow-sm">
@@ -203,10 +203,20 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
   </script>
   <script src="<?= esc($scriptDir . '/assets/js/api.js') ?>?v=<?= filemtime(FCPATH . 'assets/js/api.js') ?>"></script>
   <script>
-    const TOUR_GUIDES = Array.isArray(ADMIN_BOOTSTRAP.guides) ? ADMIN_BOOTSTRAP.guides : [];
+    let TOUR_GUIDES = Array.isArray(ADMIN_BOOTSTRAP.guides) ? ADMIN_BOOTSTRAP.guides : [];
     const API_BASE_URL = ADMIN_BOOTSTRAP.apiBaseUrl || '/api/tour-guides';
     const API_V1_GUIDES = ADMIN_BOOTSTRAP.apiV1Guides || '/api/v1/guides';
     const escapeHtml = v => String(v ?? "").replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;" }[ch]));
+
+    async function refreshAdminGuidesFromApi() {
+      try {
+        const resp = await window.SumutGoApi.guides.list({ page: 1, per_page: 500 });
+        if (Array.isArray(resp?.data)) {
+          TOUR_GUIDES = resp.data;
+          renderAdminLedger();
+        }
+      } catch (_) {}
+    }
 
     function updateKpis() {
       document.getElementById("kpiTotal").textContent = String(TOUR_GUIDES.length);
@@ -220,13 +230,16 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
       const busy = TOUR_GUIDES.filter(g => g.status !== "Tersedia");
       const fb = document.getElementById("adminActionFeedback");
       document.getElementById("bookingLedgerList").innerHTML = busy.length
-        ? busy.map(g => `<div class="py-2.5 flex justify-between items-center gap-2">
-            <div class="min-w-0">
-              <strong class="text-ink block truncate">${escapeHtml(g.id)} • ${escapeHtml(g.name)}</strong>
-              <div class="text-[11px] text-muted truncate">${escapeHtml(g.status)} • ${escapeHtml(g.destName)}</div>
-            </div>
-            <button type="button" data-rel="${escapeHtml(g.id)}" class="shrink-0 px-3 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white font-semibold transition">Set Tersedia</button>
-          </div>`).join("")
+        ? busy.map(g => {
+            const untilTxt = g.active_booking_end_date ? ` • s.d. ${g.active_booking_end_date}` : "";
+            return `<div class="py-2.5 flex justify-between items-center gap-2">
+              <div class="min-w-0">
+                <strong class="text-ink block truncate">${escapeHtml(g.id)} • ${escapeHtml(g.name)}</strong>
+                <div class="text-[11px] text-muted truncate">${escapeHtml(g.status)}${escapeHtml(untilTxt)} • ${escapeHtml(g.destName)}</div>
+              </div>
+              <button type="button" data-rel="${escapeHtml(g.id)}" class="shrink-0 px-3 py-1 rounded-full bg-lokalesoft hover:bg-lokale text-lokale hover:text-white font-semibold transition">Set Tersedia</button>
+            </div>`;
+          }).join("")
         : `<p class="py-6 text-center text-muted">Seluruh ${TOUR_GUIDES.length} pemandu saat ini berstatus Tersedia.</p>`;
 
       document.querySelectorAll("[data-rel]").forEach(b => b.addEventListener("click", async () => {
@@ -253,7 +266,10 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
           const data = await resp.json();
           if (!resp.ok) throw new Error(data.message || "Gagal memperbarui status.");
           const g = TOUR_GUIDES.find(x => x.id === id);
-          if (g) g.status = "Tersedia";
+          if (g) {
+            g.status = "Tersedia";
+            g.active_booking_end_date = null;
+          }
           fb.className = "p-2.5 rounded-xl border border-emerald-200 bg-emerald-50 text-emerald-700 text-[11px] font-medium";
           fb.textContent = data.message || `Status ${id} diperbarui menjadi Tersedia.`;
           fb.classList.remove("hidden");
@@ -673,7 +689,7 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
               if (cancelReason !== undefined) payload.cancel_reason = cancelReason;
               const r = await window.SumutGoApi.bookings.updateStatus(bookingId, payload);
               setV1Feedback(r.message || `Booking diperbarui menjadi ${nextStatus}.`, false);
-              await loadV1AdminData();
+              await Promise.all([loadV1AdminData(), refreshAdminGuidesFromApi()]);
             } catch (err) {
               setV1Feedback(err.message || "Gagal memperbarui booking.", true);
               btn.disabled = false;
@@ -735,7 +751,11 @@ $onDutyGuides = (int) ($stats['on_duty_guides'] ?? count(array_filter($guides, s
         loadV1AdminData();
       });
       document.getElementById("btnV1AdminRefresh")?.addEventListener("click", () => loadV1AdminData());
-      document.getElementById("v1AdminSearch")?.addEventListener("input", () => loadV1AdminData());
+      let v1SearchTimer = null;
+      document.getElementById("v1AdminSearch")?.addEventListener("input", () => {
+        if (v1SearchTimer) window.clearTimeout(v1SearchTimer);
+        v1SearchTimer = window.setTimeout(() => loadV1AdminData(), 220);
+      });
 
       initV1AdminSession();
     });

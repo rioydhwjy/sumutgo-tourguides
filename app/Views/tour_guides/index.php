@@ -181,7 +181,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
 
   <main class="flex-1">
 
-    <!-- TAB 1: BERANDA ALA LOKALE.COFFEE + DIREKTORI 50 PEMANDU -->
+    <!-- TAB 1: BERANDA + DIREKTORI PEMANDU -->
     <section id="view-directory">
       <!-- HERO -->
       <div id="beranda" class="bg-gradient-to-b from-lokalesoft/70 via-white to-white pt-10 pb-14 px-4 sm:px-6 lg:px-8">
@@ -308,7 +308,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
         </div>
       </div>
 
-      <!-- DIREKTORI LENGKAP 50 PEMANDU -->
+      <!-- DIREKTORI LENGKAP PEMANDU -->
       <div id="direktori-pemandu" class="py-16 px-4 sm:px-6 lg:px-8 bg-white">
         <div class="max-w-7xl mx-auto space-y-6">
           <div class="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -477,12 +477,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
             <span class="text-xs font-bold uppercase tracking-wider text-lokale">Peta Sebaran <?= $totalGuides ?> Basecamp Medan</span>
             <h2 class="font-display font-extrabold text-2xl text-ink mt-0.5">Cari Pemandu Wisata Terdekat</h2>
           </div>
-          <div class="flex flex-wrap items-center gap-2">
-            <button type="button" data-landmark="3.5612,98.6564,Kampus Politeknik Negeri Medan (Polmed)" class="landmark-btn px-3.5 py-2 rounded-full bg-lokale text-white font-semibold text-xs">📍 Polmed</button>
-            <button type="button" data-landmark="3.5896,98.6738,Stasiun Besar Medan / Merdeka Walk" class="landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs">📍 Merdeka Walk</button>
-            <button type="button" data-landmark="3.5752,98.6837,Istana Maimun" class="landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs">📍 Istana Maimun</button>
-            <button type="button" data-landmark="3.6422,98.8853,Bandara Kualanamu (KNO)" class="landmark-btn px-3.5 py-2 rounded-full bg-lokalesoft text-lokale font-semibold text-xs">✈️ Kualanamu</button>
-          </div>
+          <p class="text-xs text-muted">Klik langsung pada peta atau gunakan tombol <strong class="text-lokale">Lokasi Saya</strong> di sudut kanan peta untuk menentukan titik jemput.</p>
         </div>
         <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-2.5 rounded-2xl bg-lokalesoft/50 border border-lokaleborder text-xs">
           <div class="flex flex-wrap items-center gap-3">
@@ -508,7 +503,7 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
           <div class="lg:col-span-8 space-y-2">
             <div id="medanLeafletMap" class="border border-lokaleborder"></div>
             <div class="flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted">
-              <div>Titik Jemput: <strong id="activeRefLabel" class="text-lokale">Politeknik Negeri Medan</strong></div>
+              <div>Titik Jemput: <strong id="activeRefLabel" class="text-lokale">Pusat Kota Medan</strong></div>
               <div id="mapLocationStatus" class="hidden font-medium"></div>
             </div>
           </div>
@@ -658,8 +653,8 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
                   </div>
                 </div>
                 <div class="grid grid-cols-2 gap-2">
-                  <input id="routeUserLat" type="number" step="any" required value="3.5612" placeholder="user_lat" class="w-full bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 font-mono text-[11px] text-ink" />
-                  <input id="routeUserLng" type="number" step="any" required value="98.6564" placeholder="user_lng" class="w-full bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 font-mono text-[11px] text-ink" />
+                  <input id="routeUserLat" type="number" step="any" required value="3.5952" placeholder="user_lat" class="w-full bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 font-mono text-[11px] text-ink" />
+                  <input id="routeUserLng" type="number" step="any" required value="98.6722" placeholder="user_lng" class="w-full bg-white border border-lokaleborder rounded-xl px-2.5 py-1.5 font-mono text-[11px] text-ink" />
                 </div>
               </div>
 
@@ -751,7 +746,10 @@ $defaultBookDate = date('Y-m-d', strtotime('+1 day'));
     <div class="bg-white border border-lokaleborder rounded-3xl max-w-2xl w-full max-h-[92vh] overflow-y-auto shadow-2xl">
       <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 z-20 bg-white">
         <div>
-          <span id="modalGuideId" class="text-[11px] font-mono font-bold text-lokale uppercase">TG-001</span>
+          <div class="flex flex-wrap items-center gap-1.5">
+            <span id="modalGuideId" class="text-[11px] font-mono font-bold text-lokale uppercase">TG-001</span>
+            <span id="modalGuideDutyUntil" class="hidden"></span>
+          </div>
           <h3 id="modalGuideName" class="text-lg font-display font-extrabold text-ink">-</h3>
         </div>
         <button id="btnCloseGuideModal" type="button" class="w-8 h-8 rounded-full bg-lokalesoft hover:bg-lokale hover:text-white text-lokale text-lg transition">&times;</button>

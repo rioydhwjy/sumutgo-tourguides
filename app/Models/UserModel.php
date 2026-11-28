@@ -183,8 +183,8 @@ class UserModel extends Model
 
         $items = array_map(static function (array $row): array {
             $row['user_id']       = (int) $row['user_id'];
-            $row['is_active']     = ($row['is_active'] === true || $row['is_active'] === 't' || $row['is_active'] === '1');
-            $row['is_verified']   = ($row['is_verified'] === true || $row['is_verified'] === 't' || $row['is_verified'] === '1');
+            $row['is_active']     = self::toPgBool($row['is_active'] ?? true);
+            $row['is_verified']   = self::toPgBool($row['is_verified'] ?? false);
             $row['booking_count'] = (int) ($row['booking_count'] ?? 0);
             return $row;
         }, $items);
@@ -244,8 +244,8 @@ class UserModel extends Model
         }
 
         $row['user_id']     = (int) $row['user_id'];
-        $row['is_active']   = ($row['is_active'] === true || $row['is_active'] === 't' || $row['is_active'] === '1');
-        $row['is_verified'] = ($row['is_verified'] === true || $row['is_verified'] === 't' || $row['is_verified'] === '1');
+        $row['is_active']   = self::toPgBool($row['is_active'] ?? true);
+        $row['is_verified'] = self::toPgBool($row['is_verified'] ?? false);
 
         return $row;
     }

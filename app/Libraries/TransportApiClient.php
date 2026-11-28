@@ -33,8 +33,10 @@ class TransportApiClient
 
     public function isKeyConfigured(bool $requireSecret = false): bool
     {
-        $key = $requireSecret ? $this->secretKey : $this->resolveReadKey();
-        return ! $this->isPlaceholder($key);
+        if ($requireSecret) {
+            return $this->hasWritableSecretKey();
+        }
+        return ! $this->isPlaceholder($this->resolveReadKey());
     }
 
     /**
@@ -57,16 +59,12 @@ class TransportApiClient
     {
         $cleanMethod = strtoupper(trim($method)) === 'POST' ? 'POST' : 'GET';
 
-        if ($cleanMethod === 'POST') {
-            if (! $this->isPlaceholder($this->secretKey)) {
-                return $this->sendRequest('POST', '/api/transport/rekomendasi-wisata', $this->secretKey, [], $params);
+        if ($cleanMethod === 'POST' && $this->hasWritableSecretKey()) {
+            $postRes = $this->sendRequest('POST', '/api/transport/rekomendasi-wisata', $this->secretKey, [], $params);
+            if (! empty($postRes['ok']) || (int) ($postRes['errors']['upstream_status'] ?? 0) !== 403) {
+                return $postRes;
             }
-            // If only Public Key (GET-only) is configured, safely route via GET query params
-            $readKey = $this->resolveReadKey();
-            if ($this->isPlaceholder($readKey)) {
-                return $this->missingKeyResponse(false);
-            }
-            return $this->sendRequest('GET', '/api/transport/rekomendasi-wisata', $readKey, $params, null);
+            // Fallback ke GET bila secretKey pada env ternyata berizin read-only
         }
 
         $readKey = $this->resolveReadKey();
@@ -86,19 +84,64 @@ class TransportApiClient
         $isMutation = in_array($upper, ['POST', 'PUT', 'PATCH', 'DELETE'], true);
 
         if ($isMutation) {
-            if ($this->isPlaceholder($this->secretKey)) {
+            if (! $this->hasWritableSecretKey()) {
                 return $this->missingKeyResponse(true);
             }
             return $this->sendRequest($upper, $path, $this->secretKey, $query, $jsonBody);
         }
 
         // For Admin GET, prefer Secret Key and allow fallback to Public Key if Secret Key is not yet set
-        $key = ! $this->isPlaceholder($this->secretKey) ? $this->secretKey : $this->resolveReadKey();
+        $key = $this->hasWritableSecretKey() ? $this->secretKey : $this->resolveReadKey();
         if ($this->isPlaceholder($key)) {
             return $this->missingKeyResponse(true);
         }
 
         return $this->sendRequest('GET', $path, $key, $query, null);
+    }
+
+    private function hasWritableSecretKey(): bool
+    {
+        if ($this->isPlaceholder($this->secretKey)) {
+            return false;
+        }
+        $lower = strtolower($this->secretKey);
+        if (str_starts_with($lower, 'public') || $this->secretKey === $this->publicKey) {
+            return false;
+        }
+        return true;
+    }
+
+    private function resolveVerifyOption(): bool|string
+    {
+        $envBundle = trim((string) (env('TRANSPORT_API_CA_BUNDLE') ?: ''));
+        if ($envBundle !== '' && is_file($envBundle)) {
+            return $envBundle;
+        }
+
+        $iniCurl = trim((string) ini_get('curl.cainfo'));
+        if ($iniCurl !== '' && is_file($iniCurl)) {
+            return $iniCurl;
+        }
+
+        $iniSsl = trim((string) ini_get('openssl.cafile'));
+        if ($iniSsl !== '' && is_file($iniSsl)) {
+            return $iniSsl;
+        }
+
+        $candidates = [
+            '/etc/ssl/certs/ca-certificates.crt',
+            '/etc/pki/tls/certs/ca-bundle.crt',
+            'C:\\xampp\\apache\\bin\\curl-ca-bundle.crt',
+            'C:\\laragon\\etc\\ssl\\cacert.pem',
+            'C:\\Program Files\\Git\\mingw64\\etc\\ssl\\certs\\ca-bundle.crt',
+        ];
+        foreach ($candidates as $path) {
+            if (is_file($path)) {
+                return $path;
+            }
+        }
+
+        return true;
     }
 
     private function resolveReadKey(): string
@@ -153,7 +196,7 @@ class TransportApiClient
             'timeout'         => $this->timeoutSeconds,
             'connect_timeout' => min(5, $this->timeoutSeconds),
             'http_errors'     => false,
-            'verify'          => true,
+            'verify'          => $this->resolveVerifyOption(),
             'headers'         => [
                 'X-API-KEY'    => $apiKey,
                 'Accept'       => 'application/json',

@@ -190,7 +190,7 @@ class TourGuideModel extends Model
     public function createGuide(array $data, array $languageIds): array
     {
         // 1. Sanitize phone number (e.g. 08... or +62... -> 62...)
-        $phone = $this->normalizePhoneNumber((string) ($data['phone_number'] ?? ''));
+        $phone = PhoneNormalizer::normalize((string) ($data['phone_number'] ?? ''));
 
         // 2. Resolve guide_code
         $guideCode = strtoupper(trim((string) ($data['guide_code'] ?? '')));
@@ -253,7 +253,7 @@ class TourGuideModel extends Model
      */
     public function updateGuide(int $guideId, array $data, ?array $languageIds, int $expectedVersion): array
     {
-        $phone = isset($data['phone_number']) ? $this->normalizePhoneNumber((string) $data['phone_number']) : null;
+        $phone = isset($data['phone_number']) ? PhoneNormalizer::normalize((string) $data['phone_number']) : null;
 
         $updateCols = [];
         $binds = [];
@@ -365,14 +365,6 @@ class TourGuideModel extends Model
             'total_bookings'      => $totalBookings,
             'by_specialization'   => $specs,
         ];
-    }
-
-    /**
-     * Sanitize phone number to standard 62...
-     */
-    private function normalizePhoneNumber(string $phone): string
-    {
-        return PhoneNormalizer::normalize($phone);
     }
 
     /**

@@ -38,9 +38,12 @@ guide_revs AS (
 active_bookings AS (
     SELECT
         guide_id,
-        MAX(end_date) AS active_booking_end_date
+        COALESCE(
+            MAX(end_date) FILTER (WHERE status = 'ongoing'),
+            MAX(end_date) FILTER (WHERE status IN ('confirmed', 'pending'))
+        ) AS active_booking_end_date
     FROM bookings
-    WHERE status IN ('confirmed', 'ongoing')
+    WHERE status IN ('pending', 'confirmed', 'ongoing')
     GROUP BY guide_id
 )
 SELECT 
@@ -125,13 +128,31 @@ SELECT
     r.review_id,
     r.rating AS review_rating,
     r.review_text,
-    r.created_at AS review_created_at
+    r.created_at AS review_created_at,
+    u.phone_number AS tourist_phone,
+    u.is_verified AS tourist_verified,
+    COALESCE(bc_agg.contact_count, 0)::int AS contact_count,
+    bc_latest.confirmation_status AS latest_contact_status,
+    bc_latest.contact_phone AS latest_contact_phone,
+    bc_latest.confirmed_at AS latest_contact_confirmed_at
 FROM bookings b
 JOIN users u ON u.user_id = b.tourist_id
 JOIN guides g ON g.guide_id = b.guide_id
 JOIN destinations d ON d.destination_id = b.destination_id
 JOIN transports t ON t.transport_id = b.transport_id
-LEFT JOIN reviews r ON r.booking_id = b.booking_id;
+LEFT JOIN reviews r ON r.booking_id = b.booking_id
+LEFT JOIN LATERAL (
+    SELECT COUNT(*) AS contact_count
+    FROM booking_contacts bc
+    WHERE bc.booking_id = b.booking_id
+) bc_agg ON TRUE
+LEFT JOIN LATERAL (
+    SELECT bc.confirmation_status, bc.contact_phone, bc.confirmed_at
+    FROM booking_contacts bc
+    WHERE bc.booking_id = b.booking_id
+    ORDER BY bc.contact_id DESC
+    LIMIT 1
+) bc_latest ON TRUE;
 
 -- ---------------------------------------------------------------------
 -- 2. STORED FUNCTIONS TRANSAKSIONAL / ACID
@@ -218,8 +239,8 @@ BEGIN
     )
     RETURNING * INTO v_new_booking;
 
-    -- 8. Jika tanggal mulai adalah hari ini atau lampau dan guide saat ini Tersedia, sinkronkan status
-    IF p_start_date <= CURRENT_DATE AND v_guide.availability_status = 'Tersedia' THEN
+    -- 8. Sinkronkan status ketersediaan pemandu menjadi Booked bila sebelumnya Tersedia
+    IF v_guide.availability_status = 'Tersedia' THEN
         UPDATE guides SET availability_status = 'Booked', version = version + 1 WHERE guide_id = p_guide_id;
     END IF;
 
@@ -282,18 +303,32 @@ BEGIN
 
     -- 7. Sinkronkan status ketersediaan guide
     IF p_new_status = 'ongoing' THEN
-        UPDATE guides SET availability_status = 'Sedang Bertugas', version = version + 1 WHERE guide_id = v_booking.guide_id;
+        UPDATE guides SET availability_status = 'Sedang Bertugas', version = version + 1
+        WHERE guide_id = v_booking.guide_id AND availability_status != 'Sedang Bertugas';
     ELSIF p_new_status = 'confirmed' THEN
-        UPDATE guides SET availability_status = 'Booked', version = version + 1 WHERE guide_id = v_booking.guide_id AND availability_status = 'Tersedia';
+        UPDATE guides SET availability_status = 'Booked', version = version + 1
+        WHERE guide_id = v_booking.guide_id AND availability_status = 'Tersedia';
     ELSIF p_new_status IN ('completed', 'cancelled') THEN
-        -- Cek apakah guide masih memiliki booking aktif lainnya
-        IF NOT EXISTS (
+        -- Cek prioritas booking aktif lainnya: ongoing -> Sedang Bertugas, confirmed/pending -> Booked, selain itu -> Tersedia
+        IF EXISTS (
             SELECT 1 FROM bookings 
             WHERE guide_id = v_booking.guide_id 
               AND booking_id != p_booking_id 
-              AND status IN ('confirmed', 'ongoing')
+              AND status = 'ongoing'
         ) THEN
-            UPDATE guides SET availability_status = 'Tersedia', version = version + 1 WHERE guide_id = v_booking.guide_id;
+            UPDATE guides SET availability_status = 'Sedang Bertugas', version = version + 1
+            WHERE guide_id = v_booking.guide_id AND availability_status != 'Sedang Bertugas';
+        ELSIF EXISTS (
+            SELECT 1 FROM bookings 
+            WHERE guide_id = v_booking.guide_id 
+              AND booking_id != p_booking_id 
+              AND status IN ('confirmed', 'pending')
+        ) THEN
+            UPDATE guides SET availability_status = 'Booked', version = version + 1
+            WHERE guide_id = v_booking.guide_id AND availability_status != 'Booked';
+        ELSE
+            UPDATE guides SET availability_status = 'Tersedia', version = version + 1
+            WHERE guide_id = v_booking.guide_id AND availability_status != 'Tersedia';
         END IF;
     END IF;
 
